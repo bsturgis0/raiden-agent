@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+boto3
+PyGithub
+langchain-google-genai
+langchain-together
+langchain-groq
+langchain-deepseek
+langchain-community
+langchain
+langgraph
+tavily-python
+python-multipart

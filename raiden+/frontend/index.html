@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raiden Agent</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Simple Icons (replace with a proper library like Feather or FontAwesome if needed) -->
+    <style>
+        /* Basic SVG Icon Styling */
+        .icon { width: 1em; height: 1em; vertical-align: -0.125em; fill: currentColor; }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                 <svg class="icon logo" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L1 12h3v9h5v-6h4v6h5v-9h3L12 2zm0 3.8l6 5.4V19h-3v-6H9v6H6v-7.8l6-5.4z"></path></svg> <!-- Replace with actual logo -->
+                 <span>Raiden</span>
+            </div>
+            <nav class="sidebar-nav">
+                <!-- Future navigation items can go here -->
+                <a href="#" class="active"><svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M21 6h-2v9H5v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z"></path></svg> Chat</a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="model-selector">
+                    <label for="model-select">Model:</label>
+                    <select id="model-select">
+                        <option value="google-gemini">Google Gemini</option>
+                        <option value="groq-llama">Groq Llama</option>
+                        <option value="together-llama">Together Llama</option>
+                        <option value="deepseek-chat">DeepSeek Chat</option>
+                    </select>
+                </div>
+                <div class="status" id="status-indicator" title="Connection Status">
+                    <div class="status-dot"></div>
+                    <span class="status-text">Connecting...</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="chat-interface">
+            <header class="chat-header">
+                <h2>Conversation</h2>
+                <!-- Maybe add context controls later -->
+            </header>
+
+            <div class="chat-display-container">
+                <div class="chat-display" id="chat-display">
+                    <!-- Initial message -->
+                    <div class="message system-message">
+                        <div class="message-content">Initializing Raiden Interface... Awaiting backend connection.</div>
+                    </div>
+                </div>
+            </div>
+
+            <footer class="input-area-container">
+                <div class="input-area">
+                    <button id="upload-button" class="input-button" title="Upload Image">
+                        <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"></path></svg>
+                    </button>
+                    <textarea id="user-input" placeholder="Ask Raiden..." rows="1"></textarea>
+                    <button id="send-button" class="input-button" title="Send Message">
+                         <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+                    </button>
+                    <input type="file" id="file-input" accept="image/*" style="display: none;">
+                </div>
+                <div class="typing-indicator hidden" id="typing-indicator">
+                     <span></span><span></span><span></span> <!-- Dots for animation -->
+                </div>
+            </footer>
+        </main>
+
+        <!-- Confirmation Modal (Same as before, but styled by new CSS) -->
+        <div id="confirmation-modal" class="modal-overlay hidden">
+            <div class="modal-content">
+                <h2>Action Confirmation</h2>
+                <p id="confirmation-text">Please confirm the proposed action.</p>
+                <div class="modal-buttons">
+                    <button id="confirm-yes" class="button button-primary">Confirm</button>
+                    <button id="confirm-no" class="button button-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
