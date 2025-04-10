@@ -1,3 +1,7 @@
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
 # --- Standard Library Imports ---
 import getpass
 import os
@@ -560,6 +564,21 @@ def detect_personal_protective_equipment(image_path: str) -> str:
         print(color_text(f"AWS Rekognition error: {error_code} - {error_msg}", "RED")); return f"AWS Rekognition error: {error_code} - {error_msg}"
     except Exception as e:
         print(color_text(f"Error detecting PPE: {e}", "RED")); traceback.print_exc(); return f"Error detecting PPE: {e}"
+
+@tool
+def request_confirmation(action_description: str, tool_name: str, tool_args: dict) -> str:
+    """
+    Requests user confirmation before executing sensitive operations.
+    Returns a JSON string containing confirmation status and details.
+    """
+    confirmation_data = {
+        "status": "CONFIRMATION_PENDING",
+        "action_description": action_description,
+        "tool_name": tool_name,
+        "tool_args": tool_args,
+        "requires_explicit_approval": True
+    }
+    return json.dumps(confirmation_data)
 
 # --- CONFIRMED Action Tools (Internal Use Only - Called via /confirm endpoint) ---
 @tool

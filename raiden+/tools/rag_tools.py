@@ -1,3 +1,7 @@
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
 import os
 import traceback
 import asyncio
@@ -45,20 +49,22 @@ embedding_function = None
 vector_store = None
 
 def initialize_rag_components():
-    """
-    Initializes the components required for retrieval-augmented generation (RAG),
-    including the embedding model and vector store.
-    """
+    """Initialize RAG components with fallback"""
     global embedding_function, vector_store
     try:
         if embedding_function is None:
-            print(color_text(f"Initializing embedding model: {EMBEDDING_MODEL_NAME}", "CYAN"))
-            embedding_function = HuggingFaceEmbeddings(
-                model_name=EMBEDDING_MODEL_NAME,
-                model_kwargs={'device': 'cuda'} if _is_cuda_available() else {'device': 'cpu'},
-                encode_kwargs={'normalize_embeddings': True}
-            )
-            print(color_text("Embedding model initialized.", "GREEN"))
+            try:
+                print(color_text(f"Initializing embedding model: {EMBEDDING_MODEL_NAME}", "CYAN"))
+                embedding_function = HuggingFaceEmbeddings(
+                    model_name=EMBEDDING_MODEL_NAME,
+                    model_kwargs={'device': 'cpu'},  # Force CPU to avoid CUDA issues
+                    encode_kwargs={'normalize_embeddings': True}
+                )
+                print(color_text("Embedding model initialized.", "GREEN"))
+            except Exception as e:
+                print(color_text(f"Warning: Failed to initialize HuggingFace embeddings: {e}", "YELLOW"))
+                # Add a simple fallback embedding here if needed
+                embedding_function = None
 
         if vector_store is None:
             print(color_text(f"Initializing vector store at: {VECTORSTORE_DIR}", "CYAN"))

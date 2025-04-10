@@ -17,12 +17,22 @@ def build_exe():
         '--windowed',  # No console window
         '--onefile',   # Single executable
         '--clean',     # Clean cache
+        '--icon=frontend/raiden.ico',  # Add application icon
         '--add-data=frontend:frontend',  # Include frontend files
         '--add-data=tools:tools',       # Include tool modules
+        '--add-data=.env:.env',         # Include environment file
         '--hidden-import=uvicorn',
         '--hidden-import=fastapi',
         '--hidden-import=pywebview',
+        '--hidden-import=keyring',
+        '--hidden-import=pystray',
+        '--hidden-import=PIL.Image',
         '--collect-all=langchain',      # Include all langchain dependencies
+        '--collect-all=langchain_core',
+        '--collect-all=langchain_community',
+        '--collect-all=chromadb',
+        '--noconsole',                 # No terminal window
+        '--noconfirm',                 # Overwrite existing files
     ])
     
     print("\nBuild complete! You can find Raiden.exe in the 'dist' folder")

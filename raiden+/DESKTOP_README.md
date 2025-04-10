@@ -1,14 +1,13 @@
 # Raiden+ Desktop Installation Guide
 
 ## Quick Start
-1. Download the latest release of Raiden.exe
-2. Create a folder called "Raiden" on your computer (e.g., C:\Raiden)
-3. Place Raiden.exe in this folder
-4. Create a file called `.env` in the same folder with your API keys (see Configuration below)
-5. Double-click Raiden.exe to start the application
+1. Download and run the installer (RaidenSetup.exe) from the latest release
+2. Follow the installation wizard
+3. Start Raiden+ from your desktop or start menu
+4. Configure your API keys in the Settings panel
 
 ## Configuration
-Create a file named `.env` with your API keys:
+Create or edit the `.env` file in your Raiden+ installation directory:
 
 ```env
 GOOGLE_API_KEY=your_google_api_key
@@ -20,16 +19,82 @@ AWS_ACCESS_KEY_ID=your_aws_key_id
 AWS_SECRET_ACCESS_KEY=your_aws_secret
 ```
 
-## First Launch
-1. The first time you run Raiden.exe, you may see a Windows security warning
-2. Click "More info" and then "Run anyway" to proceed
-3. A new window will open with the Raiden+ interface
-4. Your data and files will be stored in "RaidenWorkspace" in your home directory
+## Features
+- Unified desktop application with embedded server
+- System tray integration for quick access
+- Native file dialogs for uploads
+- Auto-start capability
+- Offline mode support
+- Secure API key storage
+- Local file indexing and search
+
+## Workspace Location
+Your Raiden+ workspace will be created at:
+- Windows: `C:\Users\<username>\RaidenWorkspace`
+- macOS: `/Users/<username>/RaidenWorkspace`
+- Linux: `/home/<username>/RaidenWorkspace`
+
+## Build from Source
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/raiden-agent.git
+cd raiden-agent/raiden+
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Build the desktop app:
+```bash
+# Windows
+python build.py
+
+# macOS/Linux
+python3 build.py
+```
+
+4. Find the executable in the `dist` folder
 
 ## Troubleshooting
-- If the application doesn't start, check that all required API keys are in the .env file
-- Look for error messages in the raiden.log file
-- Make sure you have internet connectivity
+- If the application doesn't start:
+  - Check that all required API keys are in the .env file
+  - Look for error messages in `%APPDATA%\Raiden+\logs\raiden.log`
+  - Ensure you have internet connectivity
+  - Try running as administrator
+
+- If you see a "Windows protected your PC" message:
+  1. Click "More info"
+  2. Click "Run anyway"
+  3. The app is safe but not yet signed with a certificate
+
+- If API keys are not being recognized:
+  1. Open Settings in the app
+  2. Click "Reset API Keys"
+  3. Enter your keys again
+  4. Click "Save and Restart"
+
+## Security Features
+- API keys are stored securely using system keyring
+- Workspace encryption for sensitive data
+- Sandboxed execution environment
+- Network activity monitoring
+
+## Updates
+The application will automatically check for updates on startup. You can also:
+1. Click the system tray icon
+2. Select "Check for Updates"
+3. Follow the update prompts if available
 
 ## Support
-For help or issues, please visit our GitHub repository or contact support@raidenplus.com
+For help or issues:
+- Visit our GitHub repository
+- Open an issue for bugs
+- Join our Discord community
+- Email support@raidenplus.com
+
+## Data Privacy
+- All data is stored locally in your workspace
+- No data is sent to external servers except API calls
+- You can delete all data by removing the RaidenWorkspace folder
