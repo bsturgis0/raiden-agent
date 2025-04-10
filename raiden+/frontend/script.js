@@ -51,54 +51,59 @@ document.addEventListener('DOMContentLoaded', () => {
     function displayMessage(messageData) {
         const { role, content } = messageData;
         const messageDiv = document.createElement('div');
-        // Map roles to CSS classes (e.g., 'ai' -> 'agent')
         const roleClassMap = { 'user': 'user', 'assistant': 'agent', 'ai': 'agent', 'tool': 'tool', 'system': 'system', 'error': 'error' };
         messageDiv.classList.add('message', `${roleClassMap[role] || 'agent'}-message`);
 
         const contentDiv = document.createElement('div');
         contentDiv.classList.add('message-content');
 
-        // Basic Markdown & Link Handling (Improved)
-        let processedContent = content
-            .replace(/&/g, "&") // Escape HTML first
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
+        // Check if the content contains an image path
+        if (role === 'tool' && content.includes('Generated image saved to workspace:')) {
+            const imagePathMatch = content.match(/workspace: '([^']+)'/);
+            if (imagePathMatch) {
+                const imagePath = imagePathMatch[1];
+                const imageElement = document.createElement('img');
+                imageElement.src = `${API_BASE_URL}/${imagePath}`;
+                imageElement.alt = "Generated Image";
+                imageElement.classList.add('chat-image');
+                contentDiv.appendChild(imageElement);
+            }
+        } else {
+            // Process text content (Markdown, links, etc.)
+            let processedContent = content
+                .replace(/&/g, "&") // Escape HTML first
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
 
-        // Code blocks (```lang\n...\n``` or ```\n...\n```)
-        processedContent = processedContent.replace(/```(\w*\n)?([\s\S]*?)```/g, (match, lang, code) => {
-             const languageClass = lang ? `language-${lang.trim()}` : '';
-             // Re-escape HTML within code blocks
-             const escapedCode = code.replace(/</g, "<").replace(/>/g, ">").replace(/&/g, "&");
-             return `<pre><code class="${languageClass}">${escapedCode}</code></pre>`;
-         });
-         // Inline code (`...`)
-         processedContent = processedContent.replace(/`([^`]+)`/g, '<code>$1</code>');
-         // Bold (**...**)
-         processedContent = processedContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-         // Italic (*...*)
-         processedContent = processedContent.replace(/\*(.*?)\*/g, '<em>$1</em>');
-         // Links (simple URL detection)
-         const urlRegex = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
-         processedContent = processedContent.replace(urlRegex, url => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`);
-         // Newlines
-         processedContent = processedContent.replace(/\n/g, '<br>');
+            // Code blocks (```lang\n...\n``` or ```\n...\n```)
+            processedContent = processedContent.replace(/```(\w*\n)?([\s\S]*?)```/g, (match, lang, code) => {
+                const languageClass = lang ? `language-${lang.trim()}` : '';
+                const escapedCode = code.replace(/</g, "<").replace(/>/g, ">").replace(/&/g, "&");
+                return `<pre><code class="${languageClass}">${escapedCode}</code></pre>`;
+            });
+            // Inline code (`...`)
+            processedContent = processedContent.replace(/`([^`]+)`/g, '<code>$1</code>');
+            // Bold (**...**)
+            processedContent = processedContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Italic (*...*)
+            processedContent = processedContent.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            // Links (simple URL detection)
+            const urlRegex = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
+            processedContent = processedContent.replace(urlRegex, url => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`);
+            // Newlines
+            processedContent = processedContent.replace(/\n/g, '<br>');
 
-        contentDiv.innerHTML = processedContent;
+            contentDiv.innerHTML = processedContent;
+        }
 
         messageDiv.appendChild(contentDiv);
         chatDisplay.appendChild(messageDiv);
 
         // Scroll to bottom smoothly
         chatDisplay.scrollTo({ top: chatDisplay.scrollHeight, behavior: 'smooth' });
-
-        // Highlight code blocks if Prism.js or similar is added
-        // if (window.Prism) {
-        //     Prism.highlightAllUnder(contentDiv);
-        // }
     }
-
 
     // --- Function: Set Status ---
     function setStatus(status, text) { // status: 'connected', 'error', 'pending', 'disconnected', 'connecting'

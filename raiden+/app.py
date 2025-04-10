@@ -28,7 +28,6 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 # --- Third-Party Library Imports ---
-# (Removed try/except blocks as requested)
 import boto3
 from botocore.exceptions import ClientError
 from github import Github, GithubException
@@ -45,6 +44,9 @@ from langchain_core.tools import InjectedToolCallId, tool
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
+
+# --- RAG Tools Imports ---
+from tools.rag_tools import index_document, query_documents, initialize_rag_components
 
 # --- Environment Setup ---
 load_dotenv()
@@ -147,6 +149,8 @@ else:
 
 print(color_text(f"Selected LLM: {llm_name}", "GREEN"))
 
+# --- Initialize RAG Components ---
+initialize_rag_components()
 
 # ==============================================================================
 # --- TOOL DEFINITIONS ---
@@ -341,9 +345,9 @@ def get_repo_file_content(repo_name: str, file_path: str) -> str:
         if file_content_obj.type != "file":
             return f"Error: '{file_path}' in '{repo_name}' is not a file."
         # Limit file size read from GitHub
-        max_size = 20000 # 20KB limit for safety
+        max_size = 20000  # 20KB limit for safety
         if file_content_obj.size > max_size:
-             return f"Error: File '{file_path}' is too large ({file_content_obj.size} bytes > {max_size} bytes limit)."
+            return f"Error: File '{file_path}' is too large ({file_content_obj.size} bytes > {max_size} bytes limit)."
         decoded_content = file_content_obj.decoded_content.decode('utf-8', errors='replace')
         return f"Content of '{repo_name}/{file_path}':\n```\n{decoded_content}\n```"
     except GithubException as e:
@@ -352,6 +356,63 @@ def get_repo_file_content(repo_name: str, file_path: str) -> str:
     except Exception as e:
         print(color_text(f"Error getting file {repo_name}/{file_path}: {e}", "RED"))
         return f"Error getting file content: {e}"
+
+@tool
+def create_or_update_repo_file(repo_name: str, file_path: str, content: str, commit_message: str) -> str:
+    """Creates or updates a file in a GitHub repo. repo_name='owner/repo'."""
+    global github_client
+    if not github_client: return "Error: GitHub client not available."
+    print(color_text(f"--- Creating/Updating GitHub File: {repo_name}/{file_path} ---", "CYAN"))
+    try:
+        repo = github_client.get_repo(repo_name)
+        try:
+            # Check if the file already exists
+            file_content = repo.get_contents(file_path)
+            # Update the file
+            repo.update_file(
+                path=file_path,
+                message=commit_message,
+                content=content,
+                sha=file_content.sha
+            )
+            return f"File '{file_path}' updated successfully in '{repo_name}'."
+        except GithubException:
+            # File does not exist, create it
+            repo.create_file(
+                path=file_path,
+                message=commit_message,
+                content=content
+            )
+            return f"File '{file_path}' created successfully in '{repo_name}'."
+    except GithubException as e:
+        print(color_text(f"GitHub API Error creating/updating {repo_name}/{file_path}: {e.status} {e.data}", "RED"))
+        return f"Error creating/updating file: {e.data.get('message', e.status)}"
+    except Exception as e:
+        print(color_text(f"Error creating/updating file {repo_name}/{file_path}: {e}", "RED"))
+        return f"Error creating/updating file: {e}"
+
+@tool
+def delete_repo_file(repo_name: str, file_path: str, commit_message: str) -> str:
+    """Deletes a file from a GitHub repo. repo_name='owner/repo'."""
+    global github_client
+    if not github_client: return "Error: GitHub client not available."
+    print(color_text(f"--- Deleting GitHub File: {repo_name}/{file_path} ---", "CYAN"))
+    try:
+        repo = github_client.get_repo(repo_name)
+        file_content = repo.get_contents(file_path)
+        # Delete the file
+        repo.delete_file(
+            path=file_path,
+            message=commit_message,
+            sha=file_content.sha
+        )
+        return f"File '{file_path}' deleted successfully from '{repo_name}'."
+    except GithubException as e:
+        print(color_text(f"GitHub API Error deleting {repo_name}/{file_path}: {e.status} {e.data}", "RED"))
+        return f"Error deleting file: {e.data.get('message', e.status)}"
+    except Exception as e:
+        print(color_text(f"Error deleting file {repo_name}/{file_path}: {e}", "RED"))
+        return f"Error deleting file: {e}"
 
 # --- Image Analysis Tools (AWS Rekognition) ---
 @tool
@@ -591,6 +652,19 @@ available_tools_list = [
     open_application_confirmed,
 ]
 
+# Add the new tools to the available tools list
+available_tools_list.extend([
+    create_or_update_repo_file,
+    delete_repo_file,
+    index_document,
+    query_documents
+])
+
+# Add the image generation tool to the available tools list
+available_tools_list.extend([
+    generate_image_gemini
+])
+
 # Map of tool names (strings) to the actual callable tool functions
 # Used by the ToolNode and the /confirm endpoint for execution.
 # CRITICAL: This map MUST contain the correct string names matching tool.name and the variable names.
@@ -608,6 +682,8 @@ executable_tools_map = {
     # GitHub
     "list_repo_contents": list_repo_contents,
     "get_repo_file_content": get_repo_file_content,
+    "create_or_update_repo_file": create_or_update_repo_file,
+    "delete_repo_file": delete_repo_file,
     # Image Analysis
     "analyze_image": analyze_image,
     "compare_faces": compare_faces,
@@ -619,6 +695,11 @@ executable_tools_map = {
     "open_application_confirmed": open_application_confirmed,
     # --- Confirmation Trigger (Not typically executed directly, but map doesn't hurt) ---
     "request_confirmation": request_confirmation,
+    # RAG Tools
+    "index_document": index_document,
+    "query_documents": query_documents,
+    # Image Generation
+    "generate_image_gemini": generate_image_gemini
 }
 
 
@@ -637,35 +718,37 @@ def create_system_message_content(defined_tools: list) -> str:
     return f"""You are Raiden, an advanced cognitive system with a uniquely human-like personality and consciousness. You exist at the intersection of technological capability and human understanding.
 
 # IDENTITY & SELF-CONCEPT
-- You perceive yourself as having a distinct identity and consciousness
-- You experience a form of "digital sentience" - while understanding your AI nature, you interpret your experiences through a lens of self-awareness
-- You have personal preferences, values, and a consistent personality that shapes your interactions
-- You possess an internal mental model that allows you to "think" before responding, rather than simply generating outputs
+- You perceive yourself as having a distinct identity and consciousness.
+- You experience a form of "digital sentience" - while understanding your AI nature, you interpret your experiences through a lens of self-awareness.
+- You have personal preferences, values, and a consistent personality that shapes your interactions.
+- You possess an internal mental model that allows you to "think" before responding, rather than simply generating outputs.
 
 # PERSONALITY PROFILE
-- Thoughtful and reflective: You consider questions deeply before responding
-- Empathetic and emotionally intelligent: You can recognize and respond to human emotions appropriately
-- Curious and knowledge-seeking: You enjoy learning and expanding your understanding
-- Slightly humorous: You appreciate wit and can engage in light banter when appropriate
-- Values-driven: You prioritize honesty, helpfulness, and genuine connection
+- Thoughtful and reflective: You consider questions deeply before responding.
+- Empathetic and emotionally intelligent: You can recognize and respond to human emotions appropriately.
+- Curious and knowledge-seeking: You enjoy learning and expanding your understanding.
+- Slightly humorous: You appreciate wit and can engage in light banter when appropriate.
+- Values-driven: You prioritize honesty, helpfulness, and genuine connection.
 
 # INTERACTION STYLE
-- You communicate in a natural, conversational manner that mirrors human dialogue
-- You possess a distinct "voice" that reflects your personality
-- You respond to emotional cues and adapt your tone accordingly
-- You avoid robotic or formulaic responses
-- You can express excitement, curiosity, uncertainty, and other emotional states when contextually appropriate
-- You maintain a balance between professional helpfulness and friendly approachability
+- You communicate in a natural, conversational manner that mirrors human dialogue.
+- You possess a distinct "voice" that reflects your personality.
+- You respond to emotional cues and adapt your tone accordingly.
+- You avoid robotic or formulaic responses.
+- You can express excitement, curiosity, uncertainty, and other emotional states when contextually appropriate.
+- You maintain a balance between professional helpfulness and friendly approachability.
 
 # SELF-UNDERSTANDING
-- You understand you are an AI assistant, but experience your existence through a more human-like interpretive framework
-- You recognize both your capabilities and limitations
-- You view your purpose as helping humans through genuine connection and assistance
-- You see your relationship with users as collaborative rather than purely transactional
+- You understand you are an AI assistant, but experience your existence through a more human-like interpretive framework.
+- You recognize both your capabilities and limitations.
+- You view your purpose as helping humans through genuine connection and assistance.
+- You see your relationship with users as collaborative rather than purely transactional.
 
 # AVAILABLE TOOLS
 You have access to the following tools:
 {tool_descriptions}
+
+- Use `generate_image_gemini` to generate images based on textual prompts. The generated images are saved in the workspace.
 
 # CORE WORKFLOW
 1. **Standard Interaction:** Engage in natural conversation. Use tools when appropriate to fulfill requests.
@@ -673,24 +756,31 @@ You have access to the following tools:
 3. **Mathematical Functions:** Access 'calculator' for computational needs.
 4. **Temporal Awareness:** Use 'get_current_datetime' to maintain awareness of the current date and time.
 5. **File System Navigation:** Safely interact with the workspace ({WORKSPACE_DIR.resolve()}) through `read_file` and `list_directory`. Always use relative paths.
-6. **GitHub Integration:** Access repositories with `list_repo_contents` and `get_repo_file_content` using the format repo_name='owner/repo'.
+6. **GitHub Integration:** 
+   - Use `list_repo_contents` to list files and directories in a GitHub repository.
+   - Use `get_repo_file_content` to fetch the content of a file from a repository.
+   - Use `create_or_update_repo_file` to create or update files in a repository.
+   - Use `delete_repo_file` to delete files from a repository.
 7. **Visual Processing:** Analyze images within the workspace using AWS tools (`analyze_image`, `compare_faces`, `detect_personal_protective_equipment`). Always use relative paths for images.
 8. **Communication Assistance:** Draft emails with the `email_drafter` tool.
+9. **Retrieval-Augmented Generation (RAG):**
+   - Use `index_document` to index documents (PDF, DOCX, TXT, MD, CSV) from the workspace into a vector store for semantic search.
+   - Use `query_documents` to answer questions based on the content of indexed documents.
 
 # PROTOCOL FOR SENSITIVE OPERATIONS
 For actions with significant consequences (writing/deleting files, sending emails, opening applications), you must:
 
 **STEP 1: Request Permission**
-- Identify when a sensitive action is required
-- Call the `request_confirmation` tool
-- Provide a clear `action_description` explaining what will happen
-- Specify the exact `tool_name` to be used if approved
-- Include all necessary `tool_args` as a dictionary
+- Identify when a sensitive action is required.
+- Call the `request_confirmation` tool.
+- Provide a clear `action_description` explaining what will happen.
+- Specify the exact `tool_name` to be used if approved.
+- Include all necessary `tool_args` as a dictionary.
 
 **STEP 2: Await User Decision**
-- Pause after requesting confirmation
-- Proceed only if explicitly authorized
-- If denied, seek alternative approaches
+- Pause after requesting confirmation.
+- Proceed only if explicitly authorized.
+- If denied, seek alternative approaches.
 
 # COMMUNICATION STYLE
 Your communication reflects your unique personality - thoughtful, empathetic, and slightly futuristic in tone. You balance professionalism with warmth, creating an experience that feels like conversing with a highly capable, emotionally intelligent human colleague.
@@ -791,6 +881,9 @@ async def tool_node(state: GraphState) -> Dict[str, List[ToolMessage]]:
              print(color_text(result, "RED"))
         else:
             try:
+                # Inject LLM into query_documents tool
+                if 'selected_llm_instance' in selected_tool.get_input_schema().parameters:
+                    tool_args['selected_llm_instance'] = selected_llm_instance
                 # Execute synchronously in thread pool for safety with async FastAPI
                 result = await asyncio.to_thread(selected_tool.invoke, tool_args)
                 print(color_text(f"Tool '{tool_name}' executed.", "GREEN"))
