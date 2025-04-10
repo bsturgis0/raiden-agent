@@ -19,8 +19,8 @@ from langchain_community.document_loaders import (
     UnstructuredMarkdownLoader,
     CSVLoader,
 )
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings  # Updated import for embeddings
+from langchain_chroma import Chroma  # Updated import for Chroma vector store
 
 # --- Langchain Text Splitters ---
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -45,7 +45,10 @@ embedding_function = None
 vector_store = None
 
 def initialize_rag_components():
-    """Initializes the embedding model and vector store."""
+    """
+    Initializes the components required for retrieval-augmented generation (RAG),
+    including the embedding model and vector store.
+    """
     global embedding_function, vector_store
     try:
         if embedding_function is None:
@@ -61,7 +64,8 @@ def initialize_rag_components():
             print(color_text(f"Initializing vector store at: {VECTORSTORE_DIR}", "CYAN"))
             vector_store = Chroma(
                 persist_directory=str(VECTORSTORE_DIR.resolve()),
-                embedding_function=embedding_function
+                embedding_function=embedding_function,
+                collection_name="raiden_collection"  # Ensure a collection name is provided
             )
             print(color_text("Vector store initialized.", "GREEN"))
     except Exception as e:
@@ -103,6 +107,15 @@ text_splitter = RecursiveCharacterTextSplitter(
 
 @tool
 async def index_document(file_path: str) -> str:
+    """
+    Indexes a document into the vector store for semantic search.
+    
+    Args:
+        file_path (str): The path to the document to be indexed.
+    
+    Returns:
+        str: A message indicating the success or failure of the indexing process.
+    """
     global vector_store, embedding_function
     print(color_text(f"--- RAG: Indexing Document: {file_path} ---", "CYAN"))
 
@@ -154,6 +167,15 @@ rag_prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
 
 @tool
 async def query_documents(query: str, selected_llm_instance: Any) -> str:
+    """
+    Queries the vector store to retrieve relevant documents based on the input query.
+    
+    Args:
+        query (str): The search query.
+    
+    Returns:
+        str: The results of the query, including relevant document excerpts.
+    """
     global vector_store
     print(color_text(f"--- RAG: Querying Documents: '{query}' ---", "CYAN"))
 

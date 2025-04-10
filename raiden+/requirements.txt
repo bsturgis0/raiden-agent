@@ -25,3 +25,5 @@ chromadb
 faiss-cpu
 tiktoken
 youtube_search
+langchain-chroma
+langchain-experimental

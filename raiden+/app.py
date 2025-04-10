@@ -56,8 +56,11 @@ from langchain_community.utilities import WikipediaAPIWrapper
 from langchain_community.tools import YouTubeSearchTool
 
 # --- Python REPL Tool Imports ---
-from langchain_experimental.utilities import PythonREPL
+from langchain_experimental.utilities import PythonREPL  # Ensure this module is installed
 from langchain_core.tools import Tool
+
+# --- Image Generation Tool Import ---
+from tools.image_generation_tool import generate_image_gemini
 
 # --- Environment Setup ---
 load_dotenv()
