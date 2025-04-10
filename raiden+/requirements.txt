@@ -28,3 +28,5 @@ tiktoken
 youtube_search
 langchain-chroma
 langchain-experimental
+pyinstaller
+pywebview

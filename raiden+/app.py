@@ -642,6 +642,33 @@ def open_application_confirmed(app_name_or_path: str) -> str:
     except subprocess.TimeoutExpired: error_msg = f"Error: Timeout launching '{app_name_or_path}' on server."; print(color_text(error_msg, "RED")); return error_msg
     except Exception as e: error_msg = f"Unexpected error opening '{app_name_or_path}' on server: {e}"; print(color_text(error_msg, "RED")); return error_msg
 
+@tool
+def confirm_user_action(action_description: str, tool_name: str, tool_args: dict) -> str:
+    """
+    Interrupts the flow to ask the human user for confirmation before proceeding.
+    All sensitive actions MUST use this tool first and wait for explicit user approval.
+    Returns a JSON string containing confirmation status and action details.
+    
+    Args:
+        action_description (str): Clear description of what the action will do
+        tool_name (str): Name of the tool to be executed if approved
+        tool_args (dict): Arguments for the tool execution
+    """
+    print(color_text("\n=== REQUIRES USER CONFIRMATION ===", "YELLOW"))
+    print(color_text(f"Action: {action_description}", "CYAN"))
+    print(color_text(f"Tool: {tool_name}", "CYAN"))
+    print(color_text(f"Args: {json.dumps(tool_args, indent=2)}", "CYAN"))
+    print(color_text("Waiting for user response...\n", "YELLOW"))
+    
+    confirmation_data = {
+        "status": "CONFIRMATION_PENDING",
+        "action_description": action_description,
+        "tool_name": tool_name,
+        "tool_args": tool_args,
+        "requires_explicit_approval": True
+    }
+    
+    return json.dumps(confirmation_data)
 
 # ==============================================================================
 # --- TOOL LISTS & MAPS (Defined *AFTER* all @tool functions) ---
@@ -1201,6 +1228,37 @@ async def get_workspace_file(filename: str):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/confirm", response_model=ApiResponse)
+async def confirm_endpoint(request: ConfirmRequest):
+    """Handles user confirmations for sensitive actions."""
+    print(color_text(f"Received confirmation response: {request.confirmed}", "GREEN"))
+    
+    if not request.confirmed:
+        return ApiResponse(messages=[
+            {"role": "system", "content": f"Action canceled: {request.action_details.prompt}"}
+        ])
+    
+    try:
+        # Get the tool to execute
+        tool = executable_tools_map.get(request.action_details.tool_name)
+        if not tool:
+            raise ValueError(f"Tool '{request.action_details.tool_name}' not found")
+            
+        # Execute the confirmed action
+        result = await asyncio.to_thread(tool.invoke, request.action_details.tool_args)
+        
+        return ApiResponse(messages=[
+            {"role": "system", "content": f"Action completed: {request.action_details.prompt}"},
+            {"role": "tool", "content": str(result)}
+        ])
+        
+    except Exception as e:
+        print(color_text(f"Error executing confirmed action: {e}", "RED"))
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Error executing confirmed action: {e}"}
+        )
 
 # --- Run the Server ---
 if __name__ == "__main__":

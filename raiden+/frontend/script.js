@@ -253,6 +253,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!currentActionData) return;
 
         hideConfirmationModal();
+        const actionText = confirmed ? 'APPROVED' : 'DENIED';
+        addMessage(`You have ${actionText} this action: '${currentActionData.prompt}'`, 'system');
+
+        if (!confirmed) {
+            setLoadingState(false);
+            return; // Don't proceed if denied
+        }
+
         setLoadingState(true); // Show loading while processing confirmation
 
         // Display user's choice immediately
@@ -327,13 +335,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Function: Show Confirmation Modal ---
     function showConfirmationModal(prompt, actionDetails) {
-        confirmationText.textContent = prompt || "Do you want to proceed?";
+        const formattedPrompt = `
+            <div class="confirmation-header">Action Requires Your Approval</div>
+            <div class="confirmation-action">${prompt}</div>
+            <div class="confirmation-warning">⚠️ This action cannot be undone</div>
+        `;
+        
+        confirmationText.innerHTML = formattedPrompt;
         currentActionData = actionDetails;
-        isWaitingForConfirmation = true; // Set confirmation flag
+        isWaitingForConfirmation = true;
         confirmationModal.classList.remove('hidden');
         confirmYesButton.focus();
-        // setLoadingState(true) should already be active or set by caller
-        setStatus('pending', 'Confirmation Required');
+        
+        // Update status while waiting
+        setStatus('pending', 'Waiting for your approval...');
     }
 
     // --- Function: Hide Confirmation Modal ---
@@ -391,9 +406,29 @@ document.addEventListener('DOMContentLoaded', () => {
          }
     });
 
-    modelSelect.addEventListener('change', () => {
+    modelSelect.addEventListener('change', async () => {
         selectedModel = modelSelect.value;
-        addMessage(`Model switched to: ${selectedModel.replace('-', ' ')}`, 'system');
+        addMessage(`Switching to model: ${selectedModel.replace('-', ' ')}`, 'system');
+        
+        try {
+            const response = await fetch(CHAT_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    messages: [{ role: 'system', content: 'Model switch requested.' }],
+                    model: selectedModel 
+                }),
+            });
+
+            const data = await response.json();
+            if (data.error) {
+                addMessage(`Error switching models: ${data.error}`, 'error');
+            } else {
+                addMessage(`Successfully switched to ${selectedModel.replace('-', ' ')}`, 'system');
+            }
+        } catch (error) {
+            addMessage(`Failed to switch models: ${error.message}`, 'error');
+        }
     });
 
     confirmYesButton.addEventListener('click', () => sendConfirmation(true));
