@@ -61,3 +61,56 @@ class SessionManager:
         if not session_id:
             return None
         return self.get_session(session_id)
+
+    def clear_session(self, session_id: str) -> bool:
+        """Clears all data associated with a session."""
+        try:
+            # Clear session data
+            self.redis.delete(f"session:{session_id}")
+            
+            # Clear conversation history
+            self.redis.delete(f"conversation:{session_id}")
+            
+            # Clear any associated tool outputs
+            self.redis.delete(f"tooloutput:{session_id}")
+            
+            # Clear any temporary data
+            pattern = f"temp:{session_id}:*"
+            temp_keys = self.redis.keys(pattern)
+            if temp_keys:
+                self.redis.delete(*temp_keys)
+                
+            return True
+        except Exception as e:
+            print(f"Error clearing session {session_id}: {e}")
+            return False
+    
+    def clear_all_sessions(self) -> bool:
+        """Clears all sessions and associated data (admin only)."""
+        try:
+            # Get all session keys
+            session_pattern = "session:*"
+            session_keys = self.redis.keys(session_pattern)
+            
+            # Get all conversation keys
+            conv_pattern = "conversation:*"
+            conv_keys = self.redis.keys(conv_pattern)
+            
+            # Get all tool output keys
+            tool_pattern = "tooloutput:*"
+            tool_keys = self.redis.keys(tool_pattern)
+            
+            # Get all temporary data keys
+            temp_pattern = "temp:*"
+            temp_keys = self.redis.keys(temp_pattern)
+            
+            # Combine all keys
+            all_keys = session_keys + conv_keys + tool_keys + temp_keys
+            
+            if all_keys:
+                self.redis.delete(*all_keys)
+            
+            return True
+        except Exception as e:
+            print(f"Error clearing all sessions: {e}")
+            return False

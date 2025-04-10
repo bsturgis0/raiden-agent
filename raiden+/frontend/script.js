@@ -422,6 +422,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Function: Clear Memory ---
+    async function clearMemory() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/clear-memory`, {
+                method: 'POST',
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Failed to clear memory');
+            }
+            
+            addMessage("Memory has been cleared. Starting fresh conversation.", 'system');
+            setStatus('connected', 'Memory Cleared');
+            
+        } catch (error) {
+            console.error('Error clearing memory:', error);
+            addMessage(`Error clearing memory: ${error.message}`, 'error');
+            setStatus('error', 'Clear Failed');
+        }
+    }
 
     // --- Function: Show Confirmation Modal ---
     function showConfirmationModal(prompt, actionDetails) {
@@ -531,6 +553,11 @@ document.addEventListener('DOMContentLoaded', () => {
          }
      });
 
+    document.getElementById('clear-memory-button').addEventListener('click', () => {
+        if (confirm('Are you sure you want to clear the conversation memory?')) {
+            clearMemory();
+        }
+    });
 
     // --- Initial Setup ---
     setStatus('connecting', 'Connecting...');

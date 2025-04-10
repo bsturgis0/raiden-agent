@@ -1401,6 +1401,23 @@ async def confirm_endpoint(request: ConfirmRequest):
             content={"error": f"Error executing confirmed action: {e}"}
         )
 
+@app.post("/clear-memory")
+async def clear_memory_endpoint(request: Request):
+    """Clears the memory for the current session or all sessions."""
+    try:
+        session_id = request.cookies.get("session_id")
+        if session_id:
+            # Clear specific session
+            success = session_manager.clear_session(session_id)
+            if success:
+                return {"message": "Memory cleared for current session"}
+            else:
+                raise HTTPException(status_code=500, detail="Failed to clear session memory")
+        else:
+            raise HTTPException(status_code=400, detail="No active session found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error clearing memory: {str(e)}")
+
 # --- Run the Server ---
 if __name__ == "__main__":
     print(color_text("Starting FastAPI server...", "GREEN"))
