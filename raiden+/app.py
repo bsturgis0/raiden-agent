@@ -66,6 +66,9 @@ from langchain_core.tools import Tool
 # --- Image Generation Tool Import ---
 from tools.image_generation_tool import generate_image_gemini
 
+# --- Redis Memory Management ---
+from langchain_community.chat_message_histories import UpstashRedisChatMessageHistory
+
 # --- Environment Setup ---
 load_dotenv()
 
@@ -1130,7 +1133,7 @@ async def ping():
 
 @app.post("/chat", response_model=ApiResponse)
 async def chat_endpoint(request: ChatRequest):
-    """Handles user messages and runs the agent graph."""
+    """Handles user messages and runs the agent graph with memory persistence."""
     print(color_text(f"Received /chat request with {len(request.messages)} message(s)", "GREEN"))
 
     # Dynamically switch the LLM based on the selected model
@@ -1197,6 +1200,21 @@ async def chat_endpoint(request: ChatRequest):
             response_messages.append(msg_dict)
 
         confirmation_data = final_state.get("requires_confirmation")
+
+        # Save messages to Redis if available
+        if chat_memory and response_messages:
+            try:
+                for msg in response_messages:
+                    if msg["role"] == "user":
+                        chat_memory.add_user_message(msg["content"])
+                    elif msg["role"] == "assistant":
+                        chat_memory.add_ai_message(msg["content"])
+                    elif msg["role"] == "system":
+                        # Skip system messages to avoid cluttering memory
+                        continue
+                print(color_text("Messages saved to memory", "GREEN"))
+            except Exception as e:
+                print(color_text(f"Error saving to Redis: {e}", "RED"))
 
         return ApiResponse(messages=response_messages, requires_confirmation=confirmation_data)
 

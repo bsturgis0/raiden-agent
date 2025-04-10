@@ -9,7 +9,18 @@ cd "$(dirname "$0")"
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     echo "Installing Linux dependencies..."
     sudo apt-get update
-    sudo apt-get install -y python3-dev build-essential libsqlite3-dev python3.12-dev gtk3-libs
+    sudo apt-get install -y \
+        python3-dev \
+        build-essential \
+        libsqlite3-dev \
+        python3.12-dev \
+        libgtk-3-dev \
+        libwebkit2gtk-4.0-dev \
+        libglib2.0-dev \
+        libappindicator3-dev \
+        libgirepository1.0-dev \
+        gir1.2-gtk-3.0 \
+        gir1.2-webkit2-4.0
     pip install pysqlite3-binary
 fi
 
