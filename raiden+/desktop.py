@@ -7,18 +7,22 @@ import pystray
 from PIL import Image
 import json
 from pathlib import Path
-from typing import Optional
 import uvicorn
-from app import app, WORKSPACE_DIR
+from app import app
 
 class RaidenDesktop:
     def __init__(self):
         self.window = None
         self.tray = None
         self.is_visible = True
+        self.workspace_dir = Path.home() / "RaidenWorkspace"
+        self.workspace_dir.mkdir(exist_ok=True)
+        
+        # Set workspace for app
+        os.environ["RAIDEN_WORKSPACE"] = str(self.workspace_dir)
         
     def setup_tray(self):
-        """Create system tray icon and menu"""
+        """Setup system tray icon and menu"""
         icon_path = Path(__file__).parent / "frontend" / "raiden.ico"
         image = Image.open(icon_path)
         
@@ -30,16 +34,10 @@ class RaidenDesktop:
             self.window.hide()
             self.is_visible = False
             
-        def toggle_window():
-            if self.is_visible:
-                hide_window()
-            else:
-                show_window()
-                
         def quit_app():
             self.tray.stop()
             self.window.destroy()
-            
+        
         menu = (
             pystray.MenuItem("Show", show_window),
             pystray.MenuItem("Hide", hide_window),
@@ -52,25 +50,33 @@ class RaidenDesktop:
             "Raiden+ Agent",
             menu
         )
-        
+    
     def store_api_key(self, service: str, key: str):
         """Securely store API key"""
         keyring.set_password("raiden", service, key)
-        
-    def get_api_key(self, service: str) -> Optional[str]:
-        """Retrieve stored API key"""
-        return keyring.get_password("raiden", service)
-        
+    
+    def load_api_keys(self):
+        """Load API keys from secure storage or .env"""
+        env_path = self.workspace_dir / ".env"
+        if env_path.exists():
+            # Load keys from .env and store in keyring
+            pass
+    
     def run(self):
-        """Start the desktop application"""
-        # Start backend server
+        """Launch the desktop application"""
+        # Start FastAPI server
         server_thread = threading.Thread(
             target=lambda: uvicorn.run(app, host="127.0.0.1", port=5000),
             daemon=True
         )
         server_thread.start()
         
-        # Create window
+        # Setup system tray
+        self.setup_tray()
+        tray_thread = threading.Thread(target=self.tray.run)
+        tray_thread.start()
+        
+        # Create main window
         self.window = webview.create_window(
             'Raiden+',
             url='http://127.0.0.1:5000/frontend',
@@ -80,14 +86,7 @@ class RaidenDesktop:
             min_size=(800, 600)
         )
         
-        # Setup system tray
-        self.setup_tray()
-        
-        # Start tray icon in separate thread
-        tray_thread = threading.Thread(target=self.tray.run)
-        tray_thread.start()
-        
-        # Start main window
+        # Start GUI
         webview.start(debug=True)
 
 def main():

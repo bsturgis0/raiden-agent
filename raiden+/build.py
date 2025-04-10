@@ -1,9 +1,11 @@
+import os
+import sys
 import PyInstaller.__main__
 import shutil
 from pathlib import Path
 
 def build_exe():
-    """Build Raiden+ desktop application"""
+    """Build Raiden+ desktop application with platform-specific settings"""
     print("Building Raiden+ Desktop Application...")
     
     # Clean previous builds
@@ -11,31 +13,42 @@ def build_exe():
         if Path(path).exists():
             shutil.rmtree(path)
     
-    PyInstaller.__main__.run([
+    # Base arguments
+    args = [
         'desktop.py',
         '--name=Raiden',
-        '--windowed',  # No console window
-        '--onefile',   # Single executable
-        '--clean',     # Clean cache
-        '--icon=frontend/raiden.ico',  # Add application icon
-        '--add-data=frontend:frontend',  # Include frontend files
-        '--add-data=tools:tools',       # Include tool modules
-        '--add-data=.env:.env',         # Include environment file
+        '--clean',
+        '--add-data=frontend:frontend',
+        '--add-data=tools:tools',
         '--hidden-import=uvicorn',
         '--hidden-import=fastapi',
         '--hidden-import=pywebview',
         '--hidden-import=keyring',
+        '--hidden-import=PIL',
         '--hidden-import=pystray',
-        '--hidden-import=PIL.Image',
-        '--collect-all=langchain',      # Include all langchain dependencies
-        '--collect-all=langchain_core',
-        '--collect-all=langchain_community',
-        '--collect-all=chromadb',
-        '--noconsole',                 # No terminal window
-        '--noconfirm',                 # Overwrite existing files
-    ])
+        '--hidden-import=langchain_core',
+        '--hidden-import=chromadb',
+        '--hidden-import=pysqlite3',
+        '--collect-submodules=langchain',
+        '--collect-submodules=chromadb',
+        '--collect-data=langchain',
+        '--collect-data=chromadb',
+        f'--python-library={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so.1.0',
+        '--noconfirm',
+    ]
     
-    print("\nBuild complete! You can find Raiden.exe in the 'dist' folder")
+    # Platform-specific arguments
+    if sys.platform.startswith('win'):
+        args.extend(['--windowed', '--icon=frontend/raiden.ico'])
+    elif sys.platform.startswith('linux'):
+        args.extend([
+            '--add-binary=/usr/lib/x86_64-linux-gnu/libgtk-3.so.0:.',
+            '--add-binary=/usr/lib/x86_64-linux-gnu/libgdk-3.so.0:.'
+        ])
+    
+    PyInstaller.__main__.run(args)
+    
+    print("\nBuild complete! Find the executable in the 'dist' folder")
 
 if __name__ == '__main__':
     build_exe()

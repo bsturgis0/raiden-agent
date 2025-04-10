@@ -40,7 +40,7 @@ except ImportError:
 # --- Configuration ---
 VECTORSTORE_DIR = WORKSPACE_DIR / "vectorstore"
 VECTORSTORE_DIR.mkdir(exist_ok=True)
-EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
+EMBEDDING_MODEL = "models/text-embedding-004"  # Updated to Google's latest embedding model
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 150
 
@@ -49,21 +49,20 @@ embedding_function = None
 vector_store = None
 
 def initialize_rag_components():
-    """Initialize RAG components with fallback"""
+    """Initialize RAG components with Google's text-embedding-004"""
     global embedding_function, vector_store
     try:
         if embedding_function is None:
             try:
-                print(color_text(f"Initializing embedding model: {EMBEDDING_MODEL_NAME}", "CYAN"))
-                embedding_function = HuggingFaceEmbeddings(
-                    model_name=EMBEDDING_MODEL_NAME,
-                    model_kwargs={'device': 'cpu'},  # Force CPU to avoid CUDA issues
-                    encode_kwargs={'normalize_embeddings': True}
+                from langchain_google_genai import GoogleGenerativeAIEmbeddings
+                print(color_text(f"Initializing Google embeddings model: {EMBEDDING_MODEL}", "CYAN"))
+                embedding_function = GoogleGenerativeAIEmbeddings(
+                    model=EMBEDDING_MODEL,
+                    google_api_key=os.environ.get("GOOGLE_API_KEY")
                 )
-                print(color_text("Embedding model initialized.", "GREEN"))
+                print(color_text("Google embeddings initialized.", "GREEN"))
             except Exception as e:
-                print(color_text(f"Warning: Failed to initialize HuggingFace embeddings: {e}", "YELLOW"))
-                # Add a simple fallback embedding here if needed
+                print(color_text(f"Warning: Failed to initialize Google embeddings: {e}", "YELLOW"))
                 embedding_function = None
 
         if vector_store is None:
