@@ -11,6 +11,12 @@ import asyncio
 import tracemalloc
 
 class ServerMonitor:
+    @staticmethod
+    def run():
+        """Static entry point for multiprocessing"""
+        monitor = ServerMonitor()
+        monitor.monitor()
+    
     def __init__(self, max_retries: int = 5, initial_delay: int = 5):
         self.max_retries = max_retries
         self.initial_delay = initial_delay
@@ -115,7 +121,7 @@ class ServerMonitor:
             return False
 
     def monitor(self):
-        """Main monitoring loop with improved crash handling using asyncio"""
+        """Main monitoring loop with improved crash handling"""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
@@ -124,10 +130,17 @@ class ServerMonitor:
         except KeyboardInterrupt:
             logging.info("Monitoring stopped by user")
         finally:
+            if self.server_process:
+                try:
+                    self.server_process.terminate()
+                    self.server_process.wait(timeout=5)
+                except:
+                    if self.server_process:
+                        self.server_process.kill()
             loop.close()
 
     async def _async_monitor(self):
-        """Async implementation of monitor"""
+        """Async implementation of the monitoring loop"""
         self.running = True
         logging.info("Starting server monitoring")
         

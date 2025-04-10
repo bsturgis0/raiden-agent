@@ -48,6 +48,7 @@ from langchain_core.tools import InjectedToolCallId, tool
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
+from langchain_community.chat_message_histories import SQLChatMessageHistory
 
 # --- RAG Tools Imports ---
 from tools.rag_tools import index_document, query_documents, initialize_rag_components
@@ -65,9 +66,6 @@ from langchain_core.tools import Tool
 
 # --- Image Generation Tool Import ---
 from tools.image_generation_tool import generate_image_gemini
-
-# --- Redis Memory Management ---
-from langchain_community.chat_message_histories import UpstashRedisChatMessageHistory
 
 # --- Environment Setup ---
 load_dotenv()
@@ -195,6 +193,11 @@ repl_tool = Tool(
     return_direct=False,
     verbose=True,  # Enable verbose mode for better error reporting
 )
+
+# --- Initialize SQLite Chat Memory ---
+chat_memory = None
+db_path = os.path.join(WORKSPACE_DIR, "chat_history.db")
+print(color_text(f"Using SQLite database at: {db_path}", "CYAN"))
 
 # ==============================================================================
 # --- TOOL DEFINITIONS ---
@@ -981,8 +984,8 @@ system_message = SystemMessage(content=create_system_message_content(available_t
 # --- LangGraph State Definition ---
 class GraphState(TypedDict):
     messages: Annotated[List[Union[HumanMessage, AIMessage, ToolMessage, SystemMessage]], add_messages]
-    # Field to explicitly signal confirmation is needed for the routing logic
     requires_confirmation: Optional[Dict[str, Any]] = None
+    session_id: Optional[str] = None  # Add session_id to state
 
 # --- LangGraph Nodes ---
 async def chatbot_node(state: GraphState) -> Dict[str, Any]:
@@ -1148,7 +1151,7 @@ from middleware.security import SecurityHeadersMiddleware
 
 # Initialize SessionManager
 session_manager = SessionManager(
-    redis_url=os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+    db_path=str(WORKSPACE_DIR / "sessions.db")
 )
 
 # Add SecurityHeadersMiddleware
@@ -1239,15 +1242,18 @@ async def chat_endpoint(request: Request, chat_request: ChatRequest):
                 content={"error": f"All models failed: {str(re)}"}
             )
 
-async def handle_chat(chat_request: ChatRequest):
-    """Handles user messages and runs the agent graph with memory persistence."""
-    print(color_text(f"Received /chat request with {len(chat_request.messages)} message(s)", "GREEN"))
+# Add import for our enhanced memory system
+from memory.sqlite_memory import memory_instance
 
-    # Dynamically switch the LLM based on the selected model
+# --- Update the chat endpoint ---
+async def handle_chat(chat_request: ChatRequest):
+    """Handles user messages with advanced memory persistence"""
     global selected_llm_instance, llm_name, llm_with_tools
     
+    print(color_text(f"Received /chat request with {len(chat_request.messages)} message(s)", "GREEN"))
+
     try:
-        # Only switch if a different model is requested
+        # Model switching code remains the same
         if chat_request.model and chat_request.model != llm_name.lower().replace(" ", "-"):
             if chat_request.model == "groq-llama" and groq_api_key_found:
                 selected_llm_instance = ChatGroq(temperature=0.7, model_name="deepseek-r1-distill-llama-70b", max_tokens=8192)
@@ -1262,74 +1268,115 @@ async def handle_chat(chat_request: ChatRequest):
                 selected_llm_instance = ChatDeepSeek(model="deepseek-chat", temperature=0.7, max_tokens=4096)
                 llm_name = "DeepSeek Chat"
             else:
-                return JSONResponse(status_code=400, content={"error": f"Model '{chat_request.model}' is not supported or API key is missing. Using {llm_name}."})
-                
+                return JSONResponse(
+                    status_code=400, 
+                    content={"error": f"Model '{chat_request.model}' is not supported or API key is missing."}
+                )
+            
             # Rebind tools to new LLM instance
             llm_with_tools = selected_llm_instance.bind_tools(available_tools_list)
             print(color_text(f"Switched to model: {llm_name}", "GREEN"))
             
+        # Filter and convert messages
+        chat_request.messages = [
+            msg for msg in chat_request.messages 
+            if msg.content or (msg.role == 'assistant' and msg.tool_calls)
+        ]
+        
+        # Initialize or get existing session_id from request
+        session_id = request.cookies.get("session_id")
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            
+        # Get existing conversation context
+        context = memory_instance.load_context(session_id)
+        if context:
+            print(color_text(f"Loaded existing context for session {session_id}", "CYAN"))
+            
+        # Convert and filter messages
+        langchain_messages = convert_client_to_langchain(chat_request.messages)
+        if not langchain_messages or not isinstance(langchain_messages[0], SystemMessage):
+            langchain_messages.insert(0, system_message)
+
+        # Initialize graph state with session context
+        initial_state: GraphState = {
+            "messages": langchain_messages,
+            "requires_confirmation": None,
+            "session_id": session_id
+        }
+
+        try:
+            # Execute graph
+            final_state = await graph.ainvoke(initial_state)
+            print(color_text(f"Graph finished. Final state keys: {final_state.keys()}", "GREEN"))
+
+            # Process messages from final state
+            response_messages = []
+            new_lc_messages = final_state.get('messages', [])
+            start_index = len(initial_state['messages'])
+            added_messages = new_lc_messages[start_index:]
+
+            # Save new messages to memory
+            memory_instance.save_conversation(session_id, added_messages)
+            
+            # Extract and save entities (simplified example)
+            topics = []
+            for msg in added_messages:
+                if isinstance(msg, HumanMessage):
+                    # Simple topic extraction - you might want to use a more sophisticated method
+                    words = msg.content.lower().split()
+                    potential_topics = [w for w in words if len(w) > 4]  # Simple example
+                    topics.extend(potential_topics[:3])  # Take first 3 longer words as topics
+                    
+            # Update context with new topics
+            memory_instance.save_context(
+                session_id=session_id,
+                context={"last_interaction": datetime.now().isoformat()},
+                topics=list(set(topics))  # Deduplicate topics
+            )
+
+            # Convert messages for API response
+            for msg in added_messages:
+                msg_dict = {"role": "assistant" if isinstance(msg, AIMessage) else "tool",
+                           "content": msg.content}
+                
+                if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls:
+                    msg_dict["tool_calls"] = msg.tool_calls
+                elif isinstance(msg, ToolMessage) and hasattr(msg, 'tool_call_id'):
+                    msg_dict["tool_call_id"] = msg.tool_call_id
+                    if hasattr(msg, 'name'):
+                        msg_dict["name"] = msg.name
+                
+                response_messages.append(msg_dict)
+
+            # Generate and save conversation summary if enough messages
+            if len(new_lc_messages) > 5:  # Only summarize longer conversations
+                # This is a simplified summary - you might want to use the LLM for better summarization
+                summary = f"Conversation with {len(new_lc_messages)} messages"
+                key_points = list(set(topics))[:5]  # Use top 5 topics as key points
+                memory_instance.save_conversation_summary(
+                    session_id=session_id,
+                    summary=summary,
+                    key_points=key_points
+                )
+
+            return ApiResponse(
+                messages=response_messages,
+                requires_confirmation=final_state.get("requires_confirmation")
+            )
+
+        except Exception as graph_err:
+            print(color_text(f"Error during graph execution: {graph_err}", "RED"))
+            raise
+
     except Exception as e:
-        print(color_text(f"Error switching models: {e}", "RED"))
-        return JSONResponse(status_code=500, content={"error": f"Error switching models: {e}"})
-
-    # Filter out empty messages and normalize content
-    chat_request.messages = [
-        msg for msg in chat_request.messages 
-        if msg.content or (msg.role == 'assistant' and msg.tool_calls)
-    ]
-    
-    langchain_messages = convert_client_to_langchain(chat_request.messages)
-    # Add server-side system message if not provided by client or if first message isn't system
-    if not langchain_messages or not isinstance(langchain_messages[0], SystemMessage):
-        langchain_messages.insert(0, system_message)
-
-    initial_state: GraphState = {"messages": langchain_messages, "requires_confirmation": None}
-
-    try:
-        # Invoke the graph asynchronously
-        final_state = await graph.ainvoke(initial_state)
-        print(color_text(f"Graph finished. Final state keys: {final_state.keys()}", "GREEN"))
-
-        # --- Process Final State ---
-        response_messages = []
-        new_lc_messages = final_state.get('messages', [])
-        start_index = len(initial_state['messages'])  # Index after initial messages
-        added_messages = new_lc_messages[start_index:]
-
-        for msg in added_messages:
-            msg_dict = {"content": msg.content or "", "role": msg.type}  # Ensure content isn't None
-            if hasattr(msg, 'name') and msg.name:  # For ToolMessage
-                msg_dict["name"] = msg.name
-            if hasattr(msg, 'tool_call_id') and msg.tool_call_id:  # For ToolMessage
-                msg_dict["tool_call_id"] = msg.tool_call_id
-            if isinstance(msg, AIMessage) and msg.tool_calls:
-                msg_dict["tool_calls"] = msg.tool_calls
-            response_messages.append(msg_dict)
-
-        confirmation_data = final_state.get("requires_confirmation")
-
-        # Save messages to Redis if available
-        if chat_memory and response_messages:
-            try:
-                for msg in response_messages:
-                    if msg["role"] == "user":
-                        chat_memory.add_user_message(msg["content"])
-                    elif msg["role"] == "assistant":
-                        chat_memory.add_ai_message(msg["content"])
-                    elif msg["role"] == "system":
-                        # Skip system messages to avoid cluttering memory
-                        continue
-                print(color_text("Messages saved to memory", "GREEN"))
-            except Exception as e:
-                print(color_text(f"Error saving to Redis: {e}", "RED"))
-
-        return ApiResponse(messages=response_messages, requires_confirmation=confirmation_data)
-
-    except Exception as e:
-        print(color_text(f"Error during /chat processing: {e}", "RED"))
+        error_msg = str(e)
+        print(color_text(f"Error during /chat processing: {error_msg}", "RED"))
         traceback.print_exc()
-        # Use JSONResponse for more control over status code on error
-        return JSONResponse(status_code=500, content={"error": f"An internal error occurred: {e}"})
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"An internal error occurred: {error_msg}"}
+        )
 
 @app.post("/upload", response_model=ApiResponse)
 async def upload_image(file: UploadFile = File(...)):
@@ -1406,20 +1453,27 @@ async def confirm_endpoint(request: ConfirmRequest):
 
 @app.post("/clear-memory")
 async def clear_memory_endpoint(request: Request):
-    """Clears the memory for the current session or all sessions."""
+    """Clears chat history from SQLite database"""
     try:
         session_id = request.cookies.get("session_id")
-        if session_id:
-            # Clear specific session
-            success = session_manager.clear_session(session_id)
-            if success:
-                return {"message": "Memory cleared for current session"}
-            else:
-                raise HTTPException(status_code=500, detail="Failed to clear session memory")
-        else:
-            raise HTTPException(status_code=400, detail="No active session found")
+        if not session_id:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No session ID found"}
+            )
+            
+        message_history = SQLChatMessageHistory(
+            session_id=session_id,
+            connection_string=f"sqlite:///{db_path}"
+        )
+        message_history.clear()
+        
+        return JSONResponse(content={"status": "success"})
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error clearing memory: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to clear memory: {str(e)}"}
+        )
 
 # --- Run the Server ---
 if __name__ == "__main__":
@@ -1430,14 +1484,15 @@ if __name__ == "__main__":
     tracemalloc.start()
     
     try:
-        # Initialize monitor in a separate process
+        # Initialize monitor in a separate process using static method
         import multiprocessing
         monitor_process = multiprocessing.Process(
-            target=lambda: ServerMonitor().monitor()
+            target=ServerMonitor.run,  # Use the static method
+            daemon=True  # Ensure process exits when main process exits
         )
         monitor_process.start()
         
-        # Run FastAPI with uvicorn using module string
+        # Run FastAPI with uvicorn
         uvicorn.run(
             "app:app",  # Use string notation for reload support
             host="0.0.0.0",
@@ -1452,5 +1507,8 @@ if __name__ == "__main__":
         # Cleanup
         tracemalloc.stop()
         if 'monitor_process' in locals():
-            monitor_process.terminate()
-            monitor_process.join()
+            try:
+                monitor_process.terminate()
+                monitor_process.join(timeout=5)  # Wait up to 5 seconds for cleanup
+            except:
+                pass  # Ignore cleanup errors on shutdown

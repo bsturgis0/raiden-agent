@@ -3,10 +3,11 @@ from typing import Optional, List, Dict
 from pathlib import Path
 import json
 from datetime import datetime
+import sqlite3
 
 from langchain_core.tools import tool
-from langchain_community.chat_message_histories import UpstashRedisChatMessageHistory
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
+from langchain_community.chat_message_histories import SQLChatMessageHistory
 
 try:
     from app import WORKSPACE_DIR, color_text
@@ -15,23 +16,20 @@ except ImportError:
     WORKSPACE_DIR.mkdir(exist_ok=True)
     def color_text(text, color="WHITE"): print(f"[{color}] {text}"); return text
 
+db_path = WORKSPACE_DIR / "chat_history.db"
+
 class ChatHistoryManager:
-    """Manages chat history using Upstash Redis"""
+    """Manages chat history using SQLite"""
     def __init__(self):
-        self.url = os.environ.get("UPSTASH_REDIS_REST_URL")
-        self.token = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
-        self.ttl = int(os.environ.get("UPSTASH_REDIS_TTL", "86400"))  # Default 24 hours
+        self.db_path = str(db_path)
+        self.connection_string = f"sqlite:///{self.db_path}"
+        print(color_text(f"Using SQLite database at: {self.db_path}", "CYAN"))
         
-        if not self.url or not self.token:
-            print(color_text("Warning: Upstash Redis credentials not configured. Using fallback storage.", "YELLOW"))
-            
-    def get_history(self, session_id: str) -> UpstashRedisChatMessageHistory:
+    def get_history(self, session_id: str) -> SQLChatMessageHistory:
         """Get chat history for a specific session"""
-        return UpstashRedisChatMessageHistory(
-            url=self.url,
-            token=self.token,
-            ttl=self.ttl,
-            session_id=session_id
+        return SQLChatMessageHistory(
+            session_id=session_id,
+            connection_string=self.connection_string
         )
         
     @staticmethod
@@ -66,7 +64,7 @@ chat_manager = ChatHistoryManager()
 @tool
 def save_chat_history(session_id: str, messages: List[Dict]) -> str:
     """
-    Saves chat messages to Upstash Redis storage.
+    Saves chat messages to SQLite storage.
     
     Args:
         session_id (str): Unique identifier for the chat session
@@ -88,7 +86,7 @@ def save_chat_history(session_id: str, messages: List[Dict]) -> str:
             elif msg["role"] == "assistant":
                 history.add_ai_message(msg["content"])
             elif msg["role"] == "system":
-                # Special handling for system messages
+                # Special handling for system messages - store as is
                 history.messages.append(SystemMessage(content=msg["content"]))
                 
         return f"Successfully saved {len(messages)} messages for session {session_id}"
@@ -99,7 +97,7 @@ def save_chat_history(session_id: str, messages: List[Dict]) -> str:
 @tool
 def load_chat_history(session_id: str) -> str:
     """
-    Loads chat messages from Upstash Redis storage.
+    Loads chat messages from SQLite storage.
     
     Args:
         session_id (str): Unique identifier for the chat session
