@@ -22,7 +22,7 @@ from typing_extensions import TypedDict
 import subprocess
 
 # --- Web Framework Imports ---
-from fastapi import FastAPI, HTTPException, UploadFile, File, Body
+from fastapi import FastAPI, HTTPException, UploadFile, File, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, FileResponse
 import uvicorn
@@ -1143,6 +1143,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from utils.session import SessionManager
+from middleware.security import SecurityHeadersMiddleware
+
+# Initialize SessionManager
+session_manager = SessionManager(
+    redis_url=os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+)
+
+# Add SecurityHeadersMiddleware
+app.add_middleware(SecurityHeadersMiddleware)
+
 # --- Pydantic Models for API Payloads ---
 class ClientMessage(BaseModel):
     role: str
@@ -1205,30 +1216,50 @@ async def ping():
     return {"status": "ok", "llm": llm_name}
 
 @app.post("/chat", response_model=ApiResponse)
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(
+    request: Request,
+    chat_request: ChatRequest
+):
+    """Handles user messages with session management"""
+    session = await session_manager.verify_session(request)
+    if not session:
+        session_id = session_manager.create_session()
+        response = await handle_chat(chat_request)
+        response.headers["Set-Cookie"] = f"session_id={session_id}; HttpOnly; Secure; SameSite=Strict"
+        return response
+        
+    # Update session with latest interaction
+    session_manager.update_session(
+        session["session_id"],
+        {"last_message_time": datetime.utcnow().isoformat()}
+    )
+    
+    return await handle_chat(chat_request)
+
+async def handle_chat(chat_request: ChatRequest):
     """Handles user messages and runs the agent graph with memory persistence."""
-    print(color_text(f"Received /chat request with {len(request.messages)} message(s)", "GREEN"))
+    print(color_text(f"Received /chat request with {len(chat_request.messages)} message(s)", "GREEN"))
 
     # Dynamically switch the LLM based on the selected model
     global selected_llm_instance, llm_name, llm_with_tools
     
     try:
         # Only switch if a different model is requested
-        if request.model and request.model != llm_name.lower().replace(" ", "-"):
-            if request.model == "groq-llama" and groq_api_key_found:
+        if chat_request.model and chat_request.model != llm_name.lower().replace(" ", "-"):
+            if chat_request.model == "groq-llama" and groq_api_key_found:
                 selected_llm_instance = ChatGroq(temperature=0.7, model_name="deepseek-r1-distill-llama-70b", max_tokens=8192)
                 llm_name = "Groq Llama 3"
-            elif request.model == "google-gemini" and google_api_key_found:
+            elif chat_request.model == "google-gemini" and google_api_key_found:
                 selected_llm_instance = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7, max_tokens=4096)
                 llm_name = "Google Gemini Flash"
-            elif request.model == "together-llama" and together_api_key_found:
+            elif chat_request.model == "together-llama" and together_api_key_found:
                 selected_llm_instance = ChatTogether(model="meta-llama/Llama-3-70b-chat-hf", temperature=0.7, max_tokens=4096)
                 llm_name = "Together Llama 3"
-            elif request.model == "deepseek-chat" and deepseek_api_key_found:
+            elif chat_request.model == "deepseek-chat" and deepseek_api_key_found:
                 selected_llm_instance = ChatDeepSeek(model="deepseek-chat", temperature=0.7, max_tokens=4096)
                 llm_name = "DeepSeek Chat"
             else:
-                return JSONResponse(status_code=400, content={"error": f"Model '{request.model}' is not supported or API key is missing. Using {llm_name}."})
+                return JSONResponse(status_code=400, content={"error": f"Model '{chat_request.model}' is not supported or API key is missing. Using {llm_name}."})
                 
             # Rebind tools to new LLM instance
             llm_with_tools = selected_llm_instance.bind_tools(available_tools_list)
@@ -1239,12 +1270,12 @@ async def chat_endpoint(request: ChatRequest):
         return JSONResponse(status_code=500, content={"error": f"Error switching models: {e}"})
 
     # Filter out empty messages and normalize content
-    request.messages = [
-        msg for msg in request.messages 
+    chat_request.messages = [
+        msg for msg in chat_request.messages 
         if msg.content or (msg.role == 'assistant' and msg.tool_calls)
     ]
     
-    langchain_messages = convert_client_to_langchain(request.messages)
+    langchain_messages = convert_client_to_langchain(chat_request.messages)
     # Add server-side system message if not provided by client or if first message isn't system
     if not langchain_messages or not isinstance(langchain_messages[0], SystemMessage):
         langchain_messages.insert(0, system_message)

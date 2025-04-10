@@ -23,7 +23,7 @@ class RaidenDesktop:
         
     def setup_tray(self):
         """Setup system tray icon and menu"""
-        icon_path = Path(__file__).parent / "frontend" / "raiden.ico"
+        icon_path = Path(__file__).parent / "frontend" / "raiden-agent.ico"  # Updated icon path
         image = Image.open(icon_path)
         
         def show_window():

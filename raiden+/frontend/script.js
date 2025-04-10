@@ -34,6 +34,90 @@ document.addEventListener('DOMContentLoaded', () => {
     modelSelect.value = 'groq-llama';
     selectedModel = 'groq-llama';
 
+    // Loading States Manager
+    const LoadingStates = {
+        IDLE: 'idle',
+        SENDING: 'sending',
+        PROCESSING: 'processing',
+        UPLOADING: 'uploading',
+        CONFIRMING: 'confirming'
+    };
+
+    class LoadingManager {
+        constructor() {
+            this.currentState = LoadingStates.IDLE;
+            this.stateCallbacks = new Map();
+        }
+        
+        setState(state, details = {}) {
+            this.currentState = state;
+            this.updateUI(state, details);
+            this.notifyCallbacks(state, details);
+        }
+        
+        updateUI(state, details) {
+            const typingIndicator = document.getElementById('typing-indicator');
+            const statusIndicator = document.getElementById('status-indicator');
+            const userInput = document.getElementById('user-input');
+            const sendButton = document.getElementById('send-button');
+            
+            switch (state) {
+                case LoadingStates.SENDING:
+                    typingIndicator.classList.remove('hidden');
+                    statusIndicator.className = 'status pending';
+                    statusIndicator.querySelector('.status-text').textContent = 'Sending message...';
+                    userInput.disabled = true;
+                    sendButton.disabled = true;
+                    break;
+                    
+                case LoadingStates.PROCESSING:
+                    typingIndicator.classList.remove('hidden');
+                    statusIndicator.className = 'status pending';
+                    statusIndicator.querySelector('.status-text').textContent = 'Raiden is thinking...';
+                    userInput.disabled = true;
+                    sendButton.disabled = true;
+                    break;
+                    
+                case LoadingStates.UPLOADING:
+                    statusIndicator.className = 'status pending';
+                    statusIndicator.querySelector('.status-text').textContent = 'Uploading file...';
+                    userInput.disabled = true;
+                    sendButton.disabled = true;
+                    break;
+                    
+                case LoadingStates.CONFIRMING:
+                    statusIndicator.className = 'status pending';
+                    statusIndicator.querySelector('.status-text').textContent = 'Awaiting confirmation...';
+                    break;
+                    
+                case LoadingStates.IDLE:
+                    typingIndicator.classList.add('hidden');
+                    statusIndicator.className = 'status connected';
+                    statusIndicator.querySelector('.status-text').textContent = 'Ready';
+                    userInput.disabled = false;
+                    sendButton.disabled = false;
+                    break;
+            }
+        }
+        
+        onStateChange(callback) {
+            const id = Math.random().toString(36).substr(2, 9);
+            this.stateCallbacks.set(id, callback);
+            return id;
+        }
+        
+        offStateChange(id) {
+            this.stateCallbacks.delete(id);
+        }
+        
+        notifyCallbacks(state, details) {
+            this.stateCallbacks.forEach(callback => callback(state, details));
+        }
+    }
+
+    // Initialize loading manager
+    const loadingManager = new LoadingManager();
+
     // --- Function: Add Message to History & Display ---
     function addMessage(text, role, details = {}) {
         const messageData = { role, content: text, ...details };
@@ -171,17 +255,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Function: Send Chat Message ---
     async function sendChatMessage() {
+        if (loadingManager.currentState !== LoadingStates.IDLE) return;
+        
         const messageText = userInput.value.trim();
-        if (!messageText || isWaitingForResponse || isWaitingForConfirmation) {
-            return;
-        }
-
-        addMessage(messageText, 'user'); // Add to history and display
-        userInput.value = '';
-        adjustTextareaHeight();
-        setLoadingState(true);
-
+        if (!messageText) return;
+        
+        loadingManager.setState(LoadingStates.SENDING);
+        
         try {
+            addMessage(messageText, 'user'); // Add to history and display
+            userInput.value = '';
+            adjustTextareaHeight();
+            setLoadingState(true);
+
             const response = await fetch(CHAT_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', },
@@ -207,6 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
              if (!isWaitingForConfirmation) {
                  setLoadingState(false);
              }
+            loadingManager.setState(LoadingStates.IDLE);
         }
     }
 
@@ -300,35 +387,38 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Function: Upload Image ---
     async function uploadImage(file) {
         if (!file) return;
-
-        setLoadingState(true);
-        addMessage(`Uploading ${file.name}...`, 'system');
-
-        const formData = new FormData();
-        formData.append('file', file);
-
+        
+        loadingManager.setState(LoadingStates.UPLOADING);
+        
         try {
-             const response = await fetch(UPLOAD_ENDPOINT, {
-                 method: 'POST',
-                 body: formData,
-                 // 'Content-Type' header is set automatically by browser for FormData
-             });
+            setLoadingState(true);
+            addMessage(`Uploading ${file.name}...`, 'system');
 
-             const data = await response.json(); // Expecting ApiResponse format
+            const formData = new FormData();
+            formData.append('file', file);
 
-              if (!response.ok) {
-                 throw new Error(data.error || data.detail || `Server error: ${response.status}`);
-             }
+            const response = await fetch(UPLOAD_ENDPOINT, {
+                method: 'POST',
+                body: formData,
+                // 'Content-Type' header is set automatically by browser for FormData
+            });
 
-             handleApiResponse(data); // Display message from backend (e.g., "File uploaded as...")
+            const data = await response.json(); // Expecting ApiResponse format
+
+            if (!response.ok) {
+                throw new Error(data.error || data.detail || `Server error: ${response.status}`);
+            }
+
+            handleApiResponse(data); // Display message from backend (e.g., "File uploaded as...")
 
         } catch (error) {
-             console.error('Upload Error:', error);
-             addMessage(`Upload failed: ${error.message}`, 'error');
-             setStatus('error', 'Upload Failed');
+            console.error('Upload Error:', error);
+            addMessage(`Upload failed: ${error.message}`, 'error');
+            setStatus('error', 'Upload Failed');
         } finally {
             setLoadingState(false);
             fileInput.value = ''; // Reset file input
+            loadingManager.setState(LoadingStates.IDLE);
         }
     }
 
