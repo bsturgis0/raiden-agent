@@ -47,3 +47,19 @@ speedtest-cli
 pypdf2
 reportlab
 pyOpenWeatherMap
+
+# Conversion Tools
+ffmpeg-python
+python-docx
+docx2pdf
+Pillow
+pandas
+openpyxl
+lxml
+
+# Media Tools
+moviepy
+pydub
+python-ffmpeg
+imageio
+python-magic

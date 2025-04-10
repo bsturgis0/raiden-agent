@@ -781,6 +781,16 @@ available_tools_list.extend([
     monitor_network_connections
 ])
 
+# Import conversion tools
+from tools.conversion_tools import convert_document, convert_image, convert_data_format
+
+# Add to available_tools_list
+available_tools_list.extend([
+    convert_document,
+    convert_image,
+    convert_data_format
+])
+
 # Map of tool names (strings) to the actual callable tool functions
 # Used by the ToolNode and the /confirm endpoint for execution.
 # CRITICAL: This map MUST contain the correct string names matching tool.name and the variable names.
@@ -842,7 +852,11 @@ executable_tools_map = {
     "get_system_info": get_system_info,
     "get_resource_usage": get_resource_usage,
     "list_running_processes": list_running_processes,
-    "monitor_network_connections": monitor_network_connections
+    "monitor_network_connections": monitor_network_connections,
+    # Conversion Tools
+    "convert_document": convert_document,
+    "convert_image": convert_image,
+    "convert_data_format": convert_data_format
 }
 
 
@@ -1030,6 +1044,9 @@ async def chatbot_node(state: GraphState) -> Dict[str, Any]:
         traceback.print_exc()
         return {"messages": [AIMessage(content=f"Sorry, I encountered an internal error: {e}")]}
 
+# Import the visualization utils
+from tools.visualization_utils import format_tool_output
+
 async def tool_node(state: GraphState) -> Dict[str, List[ToolMessage]]:
     """Executes tools based on the last AIMessage tool calls (excluding confirmation requests)."""
     print(color_text("--- Node: Tools ---", "MAGENTA"))
@@ -1060,8 +1077,9 @@ async def tool_node(state: GraphState) -> Dict[str, List[ToolMessage]]:
                 if "selected_llm_instance" in tool_args:
                     del tool_args["selected_llm_instance"]
 
-                # Execute synchronously in thread pool for safety with async FastAPI
-                result = await asyncio.to_thread(selected_tool.invoke, tool_args)
+                # Execute tool and format its output
+                raw_result = await asyncio.to_thread(selected_tool.invoke, tool_args)
+                result = format_tool_output(tool_name, raw_result)
                 print(color_text(f"Tool '{tool_name}' executed.", "GREEN"))
             except Exception as e:
                 result = f"Error executing tool '{tool_name}': {e}"
