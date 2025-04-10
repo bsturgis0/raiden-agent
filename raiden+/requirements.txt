@@ -30,3 +30,5 @@ langchain-chroma
 langchain-experimental
 pyinstaller
 pywebview
+importlib-metadata
+psutil

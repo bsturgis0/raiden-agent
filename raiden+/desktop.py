@@ -4,39 +4,41 @@ import webview
 import threading
 import uvicorn
 from pathlib import Path
-from app import app, WORKSPACE_DIR
+from app import app
 
-# Ensure proper base directory when packaged
-if getattr(sys, 'frozen', False):
-    base_dir = sys._MEIPASS
-else:
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Configure workspace directory for desktop mode
-desktop_workspace = Path.home() / "RaidenWorkspace"
-WORKSPACE_DIR = desktop_workspace
-WORKSPACE_DIR.mkdir(exist_ok=True)
+def get_workspace_dir():
+    """Get the appropriate workspace directory for desktop mode"""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        base_dir = Path(os.path.expanduser("~/RaidenWorkspace"))
+    else:
+        # Running in development
+        base_dir = Path("./raiden_workspace")
+    base_dir.mkdir(exist_ok=True)
+    return base_dir
 
 def start_server():
     """Start the FastAPI server"""
     uvicorn.run(app, host="127.0.0.1", port=5000)
 
 def main():
-    # Start the server in a separate thread
+    # Configure workspace
+    os.environ["RAIDEN_WORKSPACE"] = str(get_workspace_dir())
+    
+    # Start server in background thread
     server_thread = threading.Thread(target=start_server, daemon=True)
     server_thread.start()
 
     # Create desktop window
     window = webview.create_window(
-        'Raiden Desktop',
-        url='http://127.0.0.1:5000/frontend/index.html',
+        'Raiden+',
+        url='http://127.0.0.1:5000/frontend',
         width=1200,
         height=800,
         resizable=True,
         min_size=(800, 600)
     )
     
-    # Start the desktop application
     webview.start(debug=True)
 
 if __name__ == '__main__':
