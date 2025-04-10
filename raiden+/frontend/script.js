@@ -57,19 +57,33 @@ document.addEventListener('DOMContentLoaded', () => {
         const contentDiv = document.createElement('div');
         contentDiv.classList.add('message-content');
 
-        // Check if the content contains an image path
-        if (role === 'tool' && content.includes('Generated image saved to workspace:')) {
-            const imagePathMatch = content.match(/workspace: '([^']+)'/);
-            if (imagePathMatch) {
-                const imagePath = imagePathMatch[1];
-                const imageElement = document.createElement('img');
-                imageElement.src = `${API_BASE_URL}/${imagePath}`;
-                imageElement.alt = "Generated Image";
-                imageElement.classList.add('chat-image');
-                contentDiv.appendChild(imageElement);
+        // Handle YouTube video previews
+        if (role === 'tool' && content.includes('youtube.com/watch')) {
+            const videoLinks = content.match(/https:\/\/www\.youtube\.com\/watch\?v=[\w-]+/g);
+            if (videoLinks) {
+                videoLinks.forEach(link => {
+                    const iframe = document.createElement('iframe');
+                    iframe.src = link.replace('watch?v=', 'embed/');
+                    iframe.width = "100%";
+                    iframe.height = "315";
+                    iframe.frameBorder = "0";
+                    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+                    iframe.allowFullscreen = true;
+                    contentDiv.appendChild(iframe);
+                });
             }
-        } else {
-            // Process text content (Markdown, links, etc.)
+        }
+        // Handle Python REPL code output
+        else if (role === 'tool' && content.includes('Python REPL')) {
+            const codeBlock = document.createElement('pre');
+            const codeContent = document.createElement('code');
+            codeContent.textContent = content.replace('Python REPL Output:\n', '').trim();
+            codeBlock.appendChild(codeContent);
+            codeBlock.classList.add('python-repl-output');
+            contentDiv.appendChild(codeBlock);
+        }
+        // Handle other content
+        else {
             let processedContent = content
                 .replace(/&/g, "&") // Escape HTML first
                 .replace(/</g, "&lt;")

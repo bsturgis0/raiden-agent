@@ -48,6 +48,17 @@ from langgraph.prebuilt import ToolNode, tools_condition
 # --- RAG Tools Imports ---
 from tools.rag_tools import index_document, query_documents, initialize_rag_components
 
+# --- Wikipedia Tool Imports ---
+from langchain_community.tools import WikipediaQueryRun
+from langchain_community.utilities import WikipediaAPIWrapper
+
+# --- YouTube Search Tool Imports ---
+from langchain_community.tools import YouTubeSearchTool
+
+# --- Python REPL Tool Imports ---
+from langchain_experimental.utilities import PythonREPL
+from langchain_core.tools import Tool
+
 # --- Environment Setup ---
 load_dotenv()
 
@@ -151,6 +162,20 @@ print(color_text(f"Selected LLM: {llm_name}", "GREEN"))
 
 # --- Initialize RAG Components ---
 initialize_rag_components()
+
+# Initialize Wikipedia tool
+wikipedia_tool = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
+
+# Initialize YouTube search tool
+youtube_search_tool = YouTubeSearchTool()
+
+# Initialize Python REPL tool
+python_repl = PythonREPL()
+repl_tool = Tool(
+    name="python_repl",
+    description="A Python shell. Use this to execute Python commands. Input should be a valid Python command. If you want to see the output of a value, you should print it out with `print(...)`.",
+    func=python_repl.run,
+)
 
 # ==============================================================================
 # --- TOOL DEFINITIONS ---
@@ -665,6 +690,17 @@ available_tools_list.extend([
     generate_image_gemini
 ])
 
+# Add the Wikipedia tool to the available tools list
+available_tools_list.extend([
+    wikipedia_tool
+])
+
+# Add the YouTube search tool and Python REPL tool to the available tools list
+available_tools_list.extend([
+    youtube_search_tool,
+    repl_tool
+])
+
 # Map of tool names (strings) to the actual callable tool functions
 # Used by the ToolNode and the /confirm endpoint for execution.
 # CRITICAL: This map MUST contain the correct string names matching tool.name and the variable names.
@@ -699,7 +735,13 @@ executable_tools_map = {
     "index_document": index_document,
     "query_documents": query_documents,
     # Image Generation
-    "generate_image_gemini": generate_image_gemini
+    "generate_image_gemini": generate_image_gemini,
+    # Wikipedia
+    "wikipedia_query_run": wikipedia_tool,
+    # YouTube Search
+    "youtube_search_tool": youtube_search_tool,
+    # Python REPL
+    "python_repl": repl_tool
 }
 
 
@@ -749,6 +791,9 @@ You have access to the following tools:
 {tool_descriptions}
 
 - Use `generate_image_gemini` to generate images based on textual prompts. The generated images are saved in the workspace.
+- Use `wikipedia_query_run` to fetch summaries and information from Wikipedia pages based on a query.
+- Use `youtube_search_tool` to search for YouTube videos based on a query.
+- Use `python_repl` to execute Python commands and perform computations, create charts, or analyze data.
 
 # CORE WORKFLOW
 1. **Standard Interaction:** Engage in natural conversation. Use tools when appropriate to fulfill requests.

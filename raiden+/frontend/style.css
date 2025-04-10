@@ -441,6 +441,26 @@ html, body {
 .message-content a:hover { text-decoration: underline; }
 .user-message .message-content a { color: #cce5ff; } /* Lighter blue on dark bg */
 
+/* YouTube Video Preview Styling */
+.message-content iframe {
+    border-radius: var(--border-radius-base);
+    margin-top: 10px;
+    box-shadow: var(--shadow-soft);
+    display: block;
+}
+
+/* Python REPL Output Styling */
+.python-repl-output {
+    background-color: rgba(0, 0, 0, 0.3);
+    padding: 12px 15px;
+    border-radius: var(--border-radius-small);
+    overflow-x: auto;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+    font-size: 0.88em;
+    margin: 10px 0;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+}
 
 /* --- Confirmation Modal --- */
 .modal-overlay {
