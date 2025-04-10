@@ -166,7 +166,7 @@ Answer:"""
 rag_prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
 
 @tool
-async def query_documents(query: str, selected_llm_instance: Any) -> str:
+async def query_documents(query: str) -> str:
     """
     Queries the vector store to retrieve relevant documents based on the input query.
     
@@ -181,8 +181,6 @@ async def query_documents(query: str, selected_llm_instance: Any) -> str:
 
     if vector_store is None:
         return "Error: Vector store not initialized. Cannot query documents."
-    if selected_llm_instance is None:
-        return "Error: LLM instance not provided. Cannot generate answer."
 
     try:
         retriever = vector_store.as_retriever(
@@ -193,13 +191,16 @@ async def query_documents(query: str, selected_llm_instance: Any) -> str:
         def format_docs(docs: List[Document]) -> str:
             return "\n\n".join(f"Source: {doc.metadata.get('source_rel_path', 'Unknown')}\nContent: {doc.page_content}" for doc in docs)
 
-        setup_and_retrieval = RunnableParallel(
-            {"context": retriever | format_docs, "question": RunnablePassthrough()}
-        )
+        # Fetch documents first
+        docs = await asyncio.to_thread(retriever.get_relevant_documents, query)
+        if not docs:
+            return "No relevant documents found for your query."
 
-        rag_chain = setup_and_retrieval | rag_prompt | selected_llm_instance | StrOutputParser()
-        answer = await rag_chain.ainvoke(query)
-        return answer
+        formatted_context = format_docs(docs)
+        
+        response = f"Here are the relevant document excerpts for your query:\n\n{formatted_context}"
+        return response
+        
     except Exception as e:
         print(color_text(f"Error querying documents for '{query}': {e}", "RED"))
         traceback.print_exc()

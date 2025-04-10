@@ -929,9 +929,10 @@ async def tool_node(state: GraphState) -> Dict[str, List[ToolMessage]]:
              print(color_text(result, "RED"))
         else:
             try:
-                # Inject LLM into query_documents tool
-                if 'selected_llm_instance' in selected_tool.get_input_schema().parameters:
-                    tool_args['selected_llm_instance'] = selected_llm_instance
+                # Remove `selected_llm_instance` if it's not required by the tool
+                if "selected_llm_instance" in tool_args:
+                    del tool_args["selected_llm_instance"]
+
                 # Execute synchronously in thread pool for safety with async FastAPI
                 result = await asyncio.to_thread(selected_tool.invoke, tool_args)
                 print(color_text(f"Tool '{tool_name}' executed.", "GREEN"))

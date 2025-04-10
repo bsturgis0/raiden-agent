@@ -5,6 +5,7 @@ boto3
 PyGithub
 langchain-google-genai
 google-generativeai
+google-genai
 langchain-together
 langchain-groq
 langchain-deepseek
