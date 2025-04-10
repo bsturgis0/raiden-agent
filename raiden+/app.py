@@ -1423,11 +1423,34 @@ async def clear_memory_endpoint(request: Request):
 
 # --- Run the Server ---
 if __name__ == "__main__":
-    print(color_text("Starting FastAPI server with monitoring...", "GREEN"))
+    print(color_text("Starting FastAPI server...", "GREEN"))
     
-    # Initialize and start server monitor
-    monitor = ServerMonitor()
-    monitor.monitor()
+    # Enable memory tracking
+    import tracemalloc
+    tracemalloc.start()
     
-    # Use port 5000 as standard for this example
-    uvicorn.run("app:app", host="0.0.0.0", port=5000, reload=True)
+    try:
+        # Initialize monitor in a separate process
+        import multiprocessing
+        monitor_process = multiprocessing.Process(
+            target=lambda: ServerMonitor().monitor()
+        )
+        monitor_process.start()
+        
+        # Run FastAPI with uvicorn using module string
+        uvicorn.run(
+            "app:app",  # Use string notation for reload support
+            host="0.0.0.0",
+            port=5000,
+            reload=True,
+            log_level="info",
+            workers=1
+        )
+    except KeyboardInterrupt:
+        print(color_text("\nShutting down gracefully...", "YELLOW"))
+    finally:
+        # Cleanup
+        tracemalloc.stop()
+        if 'monitor_process' in locals():
+            monitor_process.terminate()
+            monitor_process.join()
