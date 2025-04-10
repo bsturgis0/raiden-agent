@@ -41,3 +41,9 @@ transformers
 pysqlite3-binary
 onnxruntime
 optimum
+requests
+dnspython
+speedtest-cli
+pypdf2
+reportlab
+pyOpenWeatherMap

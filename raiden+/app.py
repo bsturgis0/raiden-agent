@@ -746,6 +746,41 @@ available_tools_list.extend([
     repl_tool
 ])
 
+# Import new tools
+from tools.weather_tools import get_weather, get_location_info
+from tools.image_processing import resize_image, apply_filter, adjust_image
+from tools.pdf_tools import merge_pdfs, add_watermark, extract_pdf_pages
+from tools.network_tools import check_website, analyze_domain, test_network_speed
+from tools.monitor_tools import get_system_info, get_resource_usage, list_running_processes, monitor_network_connections
+
+# Add to available_tools_list
+available_tools_list.extend([
+    # Weather Tools
+    get_weather,
+    get_location_info,
+    
+    # Image Processing Tools
+    resize_image,
+    apply_filter,
+    adjust_image,
+    
+    # PDF Tools
+    merge_pdfs,
+    add_watermark,
+    extract_pdf_pages,
+    
+    # Network Tools
+    check_website,
+    analyze_domain,
+    test_network_speed,
+    
+    # Monitor Tools
+    get_system_info,
+    get_resource_usage,
+    list_running_processes,
+    monitor_network_connections
+])
+
 # Map of tool names (strings) to the actual callable tool functions
 # Used by the ToolNode and the /confirm endpoint for execution.
 # CRITICAL: This map MUST contain the correct string names matching tool.name and the variable names.
@@ -787,7 +822,27 @@ executable_tools_map = {
     # YouTube Search
     "youtube_search_tool": youtube_search_tool,
     # Python REPL
-    "python_repl": repl_tool
+    "python_repl": repl_tool,
+    # Weather Tools
+    "get_weather": get_weather,
+    "get_location_info": get_location_info,
+    # Image Processing Tools
+    "resize_image": resize_image,
+    "apply_filter": apply_filter,
+    "adjust_image": adjust_image,
+    # PDF Tools
+    "merge_pdfs": merge_pdfs,
+    "add_watermark": add_watermark,
+    "extract_pdf_pages": extract_pdf_pages,
+    # Network Tools
+    "check_website": check_website,
+    "analyze_domain": analyze_domain,
+    "test_network_speed": test_network_speed,
+    # Monitor Tools
+    "get_system_info": get_system_info,
+    "get_resource_usage": get_resource_usage,
+    "list_running_processes": list_running_processes,
+    "monitor_network_connections": monitor_network_connections
 }
 
 

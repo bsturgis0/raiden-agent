@@ -4,12 +4,13 @@
 1. Download and run the installer (RaidenSetup.exe) from the latest release
 2. Follow the installation wizard
 3. Start Raiden+ from your desktop or start menu
-4. Configure your API keys in the Settings panel
+4. Configure your API keys and services in the Settings panel
 
 ## Configuration
 Create or edit the `.env` file in your Raiden+ installation directory:
 
 ```env
+# Required API Keys
 GOOGLE_API_KEY=your_google_api_key
 GROQ_API_KEY=your_groq_api_key
 TAVILY_API_KEY=your_tavily_api_key
@@ -17,6 +18,21 @@ BRAVE_SEARCH_API_KEY=your_brave_api_key
 GITHUB_TOKEN=your_github_token
 AWS_ACCESS_KEY_ID=your_aws_key_id
 AWS_SECRET_ACCESS_KEY=your_aws_secret
+AWS_REGION=us-east-1
+
+# Memory Management (Required for conversation history)
+UPSTASH_REDIS_REST_URL=your_upstash_redis_url
+UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_token
+UPSTASH_REDIS_TTL=86400
+REDIS_PASSWORD=your_redis_password
+
+# Optional Email Configuration
+GMAIL_ADDRESS=your_email@gmail.com
+GMAIL_APP_PASSWORD=your_app_password
+
+# Optional Additional LLM APIs
+TOGETHER_API_KEY=your_together_api_key
+DEEPSEEK_API_KEY=your_deepseek_api_key
 ```
 
 ## Features
@@ -24,9 +40,12 @@ AWS_SECRET_ACCESS_KEY=your_aws_secret
 - System tray integration for quick access
 - Native file dialogs for uploads
 - Auto-start capability
-- Offline mode support
+- Persistent conversation memory using Redis
+- Offline mode support with local fallback
 - Secure API key storage
 - Local file indexing and search
+- Multiple LLM model support
+- Built-in visualization tools
 
 ## Workspace Location
 Your Raiden+ workspace will be created at:
