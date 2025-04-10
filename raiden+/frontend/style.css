@@ -602,3 +602,110 @@ html, body {
     box-shadow: var(--shadow-soft);
     display: block;
 }
+
+/* Tool Output Formatting */
+.tool-output {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+    border-left: 4px solid #0066cc;
+}
+
+/* Image Display */
+.chat-image {
+    max-width: 80%;
+    border-radius: 8px;
+    margin: 10px 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Code Block Styling */
+pre {
+    background: #282c34;
+    color: #abb2bf;
+    padding: 15px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-family: 'Fira Code', monospace;
+}
+
+code {
+    font-family: 'Fira Code', monospace;
+    background: #282c34;
+    color: #abb2bf;
+    padding: 2px 5px;
+    border-radius: 4px;
+}
+
+/* Table Styling */
+.markdown-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+}
+
+.markdown-table th,
+.markdown-table td {
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    text-align: left;
+}
+
+.markdown-table th {
+    background: #f8fafc;
+    font-weight: 600;
+}
+
+/* Tool-specific Output Styling */
+.python-output {
+    font-family: 'Fira Code', monospace;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 10px 0;
+}
+
+.plot-container {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 10px 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Loading States */
+.loading-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #666;
+    font-style: italic;
+}
+
+/* Error States */
+.error-message {
+    background: #fee2e2;
+    border-left: 4px solid #dc2626;
+    color: #991b1b;
+    padding: 12px;
+    margin: 8px 0;
+    border-radius: 4px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .chat-image {
+        max-width: 100%;
+    }
+    
+    pre {
+        font-size: 14px;
+    }
+    
+    .markdown-table {
+        display: block;
+        overflow-x: auto;
+    }
+}
