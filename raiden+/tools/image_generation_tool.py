@@ -5,6 +5,8 @@ import asyncio
 import traceback
 from pathlib import Path
 from typing import Optional
+from dotenv import load_dotenv
+load_dotenv()
 
 # --- Google GenAI Client Library (Specific Imports) ---
 from google import genai

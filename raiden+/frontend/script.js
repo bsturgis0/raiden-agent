@@ -30,6 +30,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentActionData = null; // Store data for confirmation { prompt: ..., tool_name: ..., tool_args: ... }
     let selectedModel = modelSelect.value; // Default to the first option
 
+    // Set default model to Groq
+    modelSelect.value = 'groq-llama';
+    selectedModel = 'groq-llama';
+
     // --- Function: Add Message to History & Display ---
     function addMessage(text, role, details = {}) {
         const messageData = { role, content: text, ...details };
@@ -57,32 +61,41 @@ document.addEventListener('DOMContentLoaded', () => {
         const contentDiv = document.createElement('div');
         contentDiv.classList.add('message-content');
 
-        // Handle YouTube video previews
-        if (role === 'tool' && content.includes('youtube.com/watch')) {
-            const videoLinks = content.match(/https:\/\/www\.youtube\.com\/watch\?v=[\w-]+/g);
-            if (videoLinks) {
-                videoLinks.forEach(link => {
-                    const iframe = document.createElement('iframe');
-                    iframe.src = link.replace('watch?v=', 'embed/');
-                    iframe.width = "100%";
-                    iframe.height = "315";
-                    iframe.frameBorder = "0";
-                    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
-                    iframe.allowFullscreen = true;
-                    contentDiv.appendChild(iframe);
-                });
+        // Handle Python REPL output specially
+        if (role === 'tool' && content.includes('Python REPL')) {
+            // Parse and format Python output
+            const output = content.replace('Python REPL Output:\n', '').trim();
+            
+            // Check if the output contains a plot file path
+            const plotMatch = output.match(/Plot has been generated and saved as '(.+?)'/);
+            if (plotMatch) {
+                // Create plot image element
+                const plotPath = plotMatch[1];
+                const plotImg = document.createElement('img');
+                plotImg.src = `/workspace/${plotPath}`; // Adjust path as needed
+                plotImg.alt = 'Python Plot';
+                plotImg.classList.add('python-plot');
+                
+                // Create output div for any text output
+                const outputDiv = document.createElement('div');
+                outputDiv.classList.add('python-repl-output');
+                outputDiv.textContent = output.replace(plotMatch[0], '').trim();
+                
+                contentDiv.appendChild(outputDiv);
+                contentDiv.appendChild(plotImg);
+            } else {
+                // Regular output without plot
+                const outputDiv = document.createElement('div');
+                outputDiv.classList.add('python-repl-output');
+                // Check for error messages
+                if (output.toLowerCase().includes('error')) {
+                    outputDiv.classList.add('python-repl-error');
+                }
+                outputDiv.textContent = output;
+                contentDiv.appendChild(outputDiv);
             }
         }
-        // Handle Python REPL code output
-        else if (role === 'tool' && content.includes('Python REPL')) {
-            const codeBlock = document.createElement('pre');
-            const codeContent = document.createElement('code');
-            codeContent.textContent = content.replace('Python REPL Output:\n', '').trim();
-            codeBlock.appendChild(codeContent);
-            codeBlock.classList.add('python-repl-output');
-            contentDiv.appendChild(codeBlock);
-        }
-        // Handle other content
+        // Handle other message types
         else {
             let processedContent = content
                 .replace(/&/g, "&") // Escape HTML first

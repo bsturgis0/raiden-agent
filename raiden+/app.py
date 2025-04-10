@@ -20,7 +20,7 @@ import subprocess
 # --- Web Framework Imports ---
 from fastapi import FastAPI, HTTPException, UploadFile, File, Body
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, FileResponse
 import uvicorn
 from pydantic import BaseModel, Field
 
@@ -136,24 +136,24 @@ else:
 
 # --- LLM Selection & Initialization ---
 # Select ONE LLM model when the server starts
-# Prioritize keys: Google > Groq > Together > DeepSeek
+# Prioritize keys: Groq > Google > Together > DeepSeek
 selected_llm_instance = None
 llm_name = "None"
 
-if google_api_key_found:
-    print(color_text("Using Google Gemini Flash (gemini-2.0-flash) as default LLM.", "GREEN"))
+if groq_api_key_found:
+    print(color_text("Using Groq Llama 3 (llama3-70b-8192) as default LLM.", "GREEN"))
+    selected_llm_instance = ChatGroq(temperature=0.7, model_name="deepseek-r1-distill-llama-70b", max_tokens=8192)
+    llm_name = "Groq Llama 3"
+elif google_api_key_found:
+    print(color_text("Using Google Gemini Flash (gemini-2.0-flash) as LLM.", "GREEN"))
     selected_llm_instance = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7, max_tokens=4096)
     llm_name = "Google Gemini Flash"
-elif groq_api_key_found:
-    print(color_text("Using Groq Llama 3 (llama3-70b-8192) as default LLM.", "GREEN"))
-    selected_llm_instance = ChatGroq(temperature=0.7, model_name="deepseek-r1-distill-llama-70b", max_tokens=8192) # Use 8k context
-    llm_name = "Groq Llama 3"
 elif together_api_key_found:
-    print(color_text("Using Together Llama 3 (meta-llama/Llama-3-70b-chat-hf) as default LLM.", "GREEN"))
+    print(color_text("Using Together Llama 3 (meta-llama/Llama-3-70b-chat-hf) as LLM.", "GREEN"))
     selected_llm_instance = ChatTogether(model="meta-llama/Llama-3-70b-chat-hf", temperature=0.7, max_tokens=4096)
     llm_name = "Together Llama 3"
 elif deepseek_api_key_found:
-    print(color_text("Using DeepSeek Chat (deepseek-chat) as default LLM.", "GREEN"))
+    print(color_text("Using DeepSeek Chat (deepseek-chat) as LLM.", "GREEN"))
     selected_llm_instance = ChatDeepSeek(model="deepseek-chat", temperature=0.7, max_tokens=4096)
     llm_name = "DeepSeek Chat"
 else:
@@ -176,8 +176,17 @@ youtube_search_tool = YouTubeSearchTool()
 python_repl = PythonREPL()
 repl_tool = Tool(
     name="python_repl",
-    description="A Python shell. Use this to execute Python commands. Input should be a valid Python command. If you want to see the output of a value, you should print it out with `print(...)`.",
+    description="""A Python shell for executing Python commands, with special support for data visualization:
+    - Create plots using matplotlib, seaborn, or plotly
+    - Save plots using plt.savefig('plot_name.png')
+    - All plots will be automatically displayed in the chat
+    - For best results, use light colors and clear labels
+    - Always close plots using plt.close() to free memory""",
     func=python_repl.run,
+    coroutine=None,
+    args_schema=None,
+    return_direct=False,
+    verbose=True,  # Enable verbose mode for better error reporting
 )
 
 # ==============================================================================
@@ -213,15 +222,15 @@ def _resolve_safe_path(filename: str) -> Path:
 
 # --- Search Tools ---
 tavily_tool = TavilySearchResults(
-    max_results=3,
+    max_results=1,
     include_answer=True,
-    include_raw_content=True,
+    include_raw_content=False,
     search_depth="advanced",
 )
 
 brave_search_tool = BraveSearch.from_api_key(
     api_key=os.environ.get("BRAVE_SEARCH_API_KEY"),
-    search_kwargs={"count": 3},
+    search_kwargs={"count": 2},
     name="brave_web_search" # Ensure name consistency
 )
 
@@ -426,7 +435,7 @@ def delete_repo_file(repo_name: str, file_path: str, commit_message: str) -> str
     if not github_client: return "Error: GitHub client not available."
     print(color_text(f"--- Deleting GitHub File: {repo_name}/{file_path} ---", "CYAN"))
     try:
-        repo = github_client.get_repo(repo_name)
+        repo = github_client.get_repo(file_path)
         file_content = repo.get_contents(file_path)
         # Delete the file
         repo.delete_file(
@@ -552,21 +561,6 @@ def detect_personal_protective_equipment(image_path: str) -> str:
     except Exception as e:
         print(color_text(f"Error detecting PPE: {e}", "RED")); traceback.print_exc(); return f"Error detecting PPE: {e}"
 
-# --- Confirmation Trigger Tool ---
-@tool
-def request_confirmation(action_description: str, tool_name: str, tool_args: dict) -> str:
-    """Signals that a sensitive action requires user confirmation before proceeding."""
-    # This tool doesn't *do* anything except act as a signal in the LLM response.
-    print(color_text(f"--- Confirmation Requested: {action_description} for tool {tool_name} ---", "YELLOW"))
-    # Return a structured message that the API handler can parse easily.
-    # Using JSON string directly in the return might be easier for API handler.
-    return json.dumps({
-         "status": "CONFIRMATION_PENDING",
-         "action_description": action_description,
-         "tool_name": tool_name,
-         "tool_args": tool_args
-    })
-
 # --- CONFIRMED Action Tools (Internal Use Only - Called via /confirm endpoint) ---
 @tool
 def write_file_confirmed(filename: str, content: str) -> str:
@@ -629,7 +623,6 @@ def send_gmail_confirmed(recipient: str, subject: str, body: str) -> str:
 @tool
 def open_application_confirmed(app_name_or_path: str) -> str:
     """(Requires Confirmation) Opens an application on the SERVER's OS."""
-    # WARNING REMAINS: This runs on the server machine. Use with extreme caution.
     print(color_text(f"--- Executing Open Application (Confirmed): {app_name_or_path} ---", "MAGENTA"))
     system = platform.system()
     command = []
@@ -740,6 +733,7 @@ executable_tools_map = {
     # Image Generation
     "generate_image_gemini": generate_image_gemini,
     # Wikipedia
+    "wikipedia": wikipedia_tool,
     "wikipedia_query_run": wikipedia_tool,
     # YouTube Search
     "youtube_search_tool": youtube_search_tool,
@@ -796,7 +790,36 @@ You have access to the following tools:
 - Use `generate_image_gemini` to generate images based on textual prompts. The generated images are saved in the workspace.
 - Use `wikipedia_query_run` to fetch summaries and information from Wikipedia pages based on a query.
 - Use `youtube_search_tool` to search for YouTube videos based on a query.
-- Use `python_repl` to execute Python commands and perform computations, create charts, or analyze data.
+- Use `python_repl` to execute Python commands and also for data visualization and analysis:
+  * Create charts using libraries like matplotlib, seaborn, or plotly
+  * Generate graphs and network visualizations
+  * Create statistical plots and heatmaps
+  * Plot mathematical functions and data distributions
+  * All visualizations will be automatically displayed in the chat interface
+  * Example visualization code:
+    ```python
+    import matplotlib.pyplot as plt
+    import numpy as np
+    
+    # Create data
+    x = np.linspace(0, 10, 100)
+    y = np.sin(x)
+    
+    # Create plot
+    plt.figure(figsize=(8, 6))
+    plt.plot(x, y, 'b-', label='sin(x)')
+    plt.title('Sine Wave')
+    plt.xlabel('x')
+    plt.ylabel('sin(x)')
+    plt.grid(True)
+    plt.legend()
+    
+    # Save the plot (it will be displayed in chat)
+    plt.savefig('plot.png')
+    plt.close()
+    
+    print("Plot has been generated and saved as 'plot.png'")
+    ```
 
 # CORE WORKFLOW
 1. **Standard Interaction:** Engage in natural conversation. Use tools when appropriate to fulfill requests.
@@ -862,7 +885,7 @@ async def chatbot_node(state: GraphState) -> Dict[str, Any]:
             confirmation_required = None
             non_confirmation_calls = []
             for tc in response.tool_calls:
-                if tc['name'] == 'request_confirmation':
+                if (tc['name'] == 'request_confirmation'):
                     try:
                         # The result of request_confirmation tool is a JSON string
                         confirmation_data = json.loads(tc['args']['_tool_input']) # Access the JSON string output
@@ -1030,20 +1053,27 @@ class ConfirmRequest(BaseModel):
 def convert_client_to_langchain(client_messages: List[ClientMessage]) -> List[BaseMessage]:
     lc_messages = []
     for msg in client_messages:
+        # Skip empty messages
+        if not msg.content and not (msg.role == 'assistant' and msg.tool_calls):
+            continue
+            
         if msg.role == 'user':
             lc_messages.append(HumanMessage(content=msg.content))
         elif msg.role == 'assistant' or msg.role == 'ai':
-            # If client sends back tool calls made by AI, reconstruct them
-            if msg.tool_calls:
-                 lc_messages.append(AIMessage(content=msg.content, tool_calls=msg.tool_calls))
-            else:
-                 lc_messages.append(AIMessage(content=msg.content))
+            lc_messages.append(AIMessage(
+                content=msg.content or "",
+                tool_calls=msg.tool_calls or []
+            ))
         elif msg.role == 'tool':
-             # Requires name and tool_call_id from client
-             lc_messages.append(ToolMessage(content=msg.content, name=msg.name or "unknown_tool", tool_call_id=msg.tool_call_id))
+            tool_call_id = msg.tool_call_id or str(uuid.uuid4())
+            tool_name = msg.name or "unknown_tool"
+            lc_messages.append(ToolMessage(
+                content=msg.content,
+                tool_call_id=tool_call_id,
+                name=tool_name
+            ))
         elif msg.role == 'system':
-             lc_messages.append(SystemMessage(content=msg.content))
-        # Add other roles if needed
+            lc_messages.append(SystemMessage(content=msg.content))
     return lc_messages
 
 # --- API Endpoints ---
@@ -1058,26 +1088,41 @@ async def chat_endpoint(request: ChatRequest):
     print(color_text(f"Received /chat request with {len(request.messages)} message(s)", "GREEN"))
 
     # Dynamically switch the LLM based on the selected model
-    global selected_llm_instance, llm_name
-    if request.model:
-        if request.model == "google-gemini" and google_api_key_found:
-            selected_llm_instance = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7, max_tokens=4096)
-            llm_name = "Google Gemini Flash"
-        elif request.model == "groq-llama" and groq_api_key_found:
-            selected_llm_instance = ChatGroq(temperature=0.7, model_name="deepseek-r1-distill-llama-70b", max_tokens=8192)
-            llm_name = "Groq Llama 3"
-        elif request.model == "together-llama" and together_api_key_found:
-            selected_llm_instance = ChatTogether(model="meta-llama/Llama-3-70b-chat-hf", temperature=0.7, max_tokens=4096)
-            llm_name = "Together Llama 3"
-        elif request.model == "deepseek-chat" and deepseek_api_key_found:
-            selected_llm_instance = ChatDeepSeek(model="deepseek-chat", temperature=0.7, max_tokens=4096)
-            llm_name = "DeepSeek Chat"
-        else:
-            print(color_text(f"Invalid or unsupported model: {request.model}", "YELLOW"))
-            return JSONResponse(status_code=400, content={"error": f"Model '{request.model}' is not supported or API key is missing."})
+    global selected_llm_instance, llm_name, llm_with_tools
+    
+    try:
+        # Only switch if a different model is requested
+        if request.model and request.model != llm_name.lower().replace(" ", "-"):
+            if request.model == "groq-llama" and groq_api_key_found:
+                selected_llm_instance = ChatGroq(temperature=0.7, model_name="deepseek-r1-distill-llama-70b", max_tokens=8192)
+                llm_name = "Groq Llama 3"
+            elif request.model == "google-gemini" and google_api_key_found:
+                selected_llm_instance = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7, max_tokens=4096)
+                llm_name = "Google Gemini Flash"
+            elif request.model == "together-llama" and together_api_key_found:
+                selected_llm_instance = ChatTogether(model="meta-llama/Llama-3-70b-chat-hf", temperature=0.7, max_tokens=4096)
+                llm_name = "Together Llama 3"
+            elif request.model == "deepseek-chat" and deepseek_api_key_found:
+                selected_llm_instance = ChatDeepSeek(model="deepseek-chat", temperature=0.7, max_tokens=4096)
+                llm_name = "DeepSeek Chat"
+            else:
+                return JSONResponse(status_code=400, content={"error": f"Model '{request.model}' is not supported or API key is missing. Using {llm_name}."})
+                
+            # Rebind tools to new LLM instance
+            llm_with_tools = selected_llm_instance.bind_tools(available_tools_list)
+            print(color_text(f"Switched to model: {llm_name}", "GREEN"))
+            
+    except Exception as e:
+        print(color_text(f"Error switching models: {e}", "RED"))
+        return JSONResponse(status_code=500, content={"error": f"Error switching models: {e}"})
 
+    # Filter out empty messages and normalize content
+    request.messages = [
+        msg for msg in request.messages 
+        if msg.content or (msg.role == 'assistant' and msg.tool_calls)
+    ]
+    
     langchain_messages = convert_client_to_langchain(request.messages)
-
     # Add server-side system message if not provided by client or if first message isn't system
     if not langchain_messages or not isinstance(langchain_messages[0], SystemMessage):
         langchain_messages.insert(0, system_message)
@@ -1087,7 +1132,6 @@ async def chat_endpoint(request: ChatRequest):
     try:
         # Invoke the graph asynchronously
         final_state = await graph.ainvoke(initial_state)
-
         print(color_text(f"Graph finished. Final state keys: {final_state.keys()}", "GREEN"))
 
         # --- Process Final State ---
@@ -1116,47 +1160,11 @@ async def chat_endpoint(request: ChatRequest):
         # Use JSONResponse for more control over status code on error
         return JSONResponse(status_code=500, content={"error": f"An internal error occurred: {e}"})
 
-@app.post("/confirm", response_model=ApiResponse)
-async def confirm_endpoint(request: ConfirmRequest):
-    """Handles the user's confirmation decision."""
-    print(color_text(f"/confirm: User {'CONFIRMED' if request.confirmed else 'CANCELED'} action.", "YELLOW"))
-
-    if not request.confirmed:
-        return ApiResponse(messages=[
-            {"role": "assistant", "content": f"Okay, I have canceled the action: '{request.action_details.prompt}'"}
-        ])
-
-    tool_name = request.action_details.tool_name
-    tool_args = request.action_details.tool_args
-    tool_to_execute = executable_tools_map.get(tool_name)
-
-    if not tool_to_execute:
-        error_msg = f"Internal Error: Could not find tool '{tool_name}' to execute."
-        print(color_text(error_msg, "RED"))
-        return JSONResponse(status_code=500, content={"error": error_msg})
-
-    try:
-        print(color_text(f"Executing confirmed tool: {tool_name} with args: {tool_args}", "MAGENTA"))
-        # Execute synchronously in thread pool
-        result = await asyncio.to_thread(tool_to_execute.invoke, tool_args)
-
-        # Return the result, mimicking a ToolMessage structure for the frontend
-        return ApiResponse(messages=[
-            {"role": "tool", "content": str(result), "name": tool_name, "tool_call_id": request.action_details.request_tool_call_id}
-        ])
-
-    except Exception as e:
-        error_msg = f"Error performing action '{request.action_details.prompt}': {e}"
-        print(color_text(error_msg, "RED"))
-        traceback.print_exc()
-        return JSONResponse(status_code=500, content={"error": error_msg})
-
 @app.post("/upload", response_model=ApiResponse)
 async def upload_image(file: UploadFile = File(...)):
     """Handles image uploads to the server's workspace."""
     if not file.content_type or not file.content_type.startswith("image/"):
          raise HTTPException(status_code=400, detail="Invalid file type. Only images are allowed.")
-
     file_extension = Path(file.filename).suffix if file.filename else ".png" # Default extension
     safe_filename = f"upload_{uuid.uuid4().hex}{file_extension}" # Use hex for cleaner name
     save_path = WORKSPACE_DIR / safe_filename
@@ -1175,6 +1183,23 @@ async def upload_image(file: UploadFile = File(...)):
         print(color_text(f"Error during file upload: {e}", "RED"))
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Could not save uploaded file: {e}")
+
+@app.get("/workspace/{filename}")
+async def get_workspace_file(filename: str):
+    """Serves files from the workspace directory (needed for plot images)."""
+    try:
+        safe_path = _resolve_safe_path(filename)
+        if not safe_path.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Determine content type
+        content_type = "image/png"  # Default for plots
+        if filename.endswith('.jpg') or filename.endswith('.jpeg'):
+            content_type = "image/jpeg"
+        
+        return FileResponse(safe_path, media_type=content_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # --- Run the Server ---
