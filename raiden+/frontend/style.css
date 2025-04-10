@@ -709,3 +709,51 @@ code {
         overflow-x: auto;
     }
 }
+
+.sidebar-actions {
+    margin-top: 20px;
+    padding: 0 15px;
+}
+
+.action-button {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #0066cc 0%, #0099ff 100%);
+    border: 1px solid #0055aa;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.action-button:hover {
+    background: linear-gradient(135deg, #0077dd 0%, #00aaff 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 153, 255, 0.2);
+}
+
+.action-button:active {
+    transform: translateY(0px);
+    box-shadow: 0 2px 6px rgba(0, 153, 255, 0.1);
+}
+
+.action-button i {
+    font-size: 16px;
+    color: #ffffff;
+}
+
+/* Confirm Dialog Animation */
+@keyframes slideIn {
+    from { transform: translateY(-100px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.confirm-dialog {
+    animation: slideIn 0.3s ease-out;
+}

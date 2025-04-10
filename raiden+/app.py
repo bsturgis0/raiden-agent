@@ -1215,26 +1215,29 @@ async def ping():
     """Simple health check endpoint."""
     return {"status": "ok", "llm": llm_name}
 
+from utils.server_monitor import ServerMonitor
+from utils.model_fallback import ModelFallbackManager
+
+# Initialize model fallback manager
+model_manager = ModelFallbackManager()
+model_manager.initialize_models()
+
+# Update chat endpoint to use model fallback
 @app.post("/chat", response_model=ApiResponse)
-async def chat_endpoint(
-    request: Request,
-    chat_request: ChatRequest
-):
-    """Handles user messages with session management"""
-    session = await session_manager.verify_session(request)
-    if not session:
-        session_id = session_manager.create_session()
-        response = await handle_chat(chat_request)
-        response.headers["Set-Cookie"] = f"session_id={session_id}; HttpOnly; Secure; SameSite=Strict"
-        return response
-        
-    # Update session with latest interaction
-    session_manager.update_session(
-        session["session_id"],
-        {"last_message_time": datetime.utcnow().isoformat()}
-    )
-    
-    return await handle_chat(chat_request)
+async def chat_endpoint(request: Request, chat_request: ChatRequest):
+    """Handles user messages with fallback and recovery"""
+    try:
+        return await handle_chat(chat_request)
+    except Exception as e:
+        logging.error(f"Chat endpoint error: {e}")
+        try:
+            # Try with model fallback
+            return await model_manager.execute_with_fallback(handle_chat, chat_request)
+        except RuntimeError as re:
+            return JSONResponse(
+                status_code=500,
+                content={"error": f"All models failed: {str(re)}"}
+            )
 
 async def handle_chat(chat_request: ChatRequest):
     """Handles user messages and runs the agent graph with memory persistence."""
@@ -1420,6 +1423,11 @@ async def clear_memory_endpoint(request: Request):
 
 # --- Run the Server ---
 if __name__ == "__main__":
-    print(color_text("Starting FastAPI server...", "GREEN"))
+    print(color_text("Starting FastAPI server with monitoring...", "GREEN"))
+    
+    # Initialize and start server monitor
+    monitor = ServerMonitor()
+    monitor.monitor()
+    
     # Use port 5000 as standard for this example
     uvicorn.run("app:app", host="0.0.0.0", port=5000, reload=True)
