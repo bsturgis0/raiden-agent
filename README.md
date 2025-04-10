@@ -17,6 +17,8 @@ Raiden+ is an advanced AI-powered assistant designed to provide seamless interac
 - **Image Analysis**: Leverage AWS Rekognition for object detection, text recognition, and more.
 - **Email Drafting**: Compose professional emails effortlessly.
 - **Mathematical Calculations**: Perform complex computations with ease.
+- **YouTube Search**: Search for YouTube videos and preview them directly in the chat interface.
+- **Python REPL**: Execute Python code dynamically for computations, data analysis, and chart creation.
 
 ### 🌐 Web Search
 - **Brave Search**: Perform web searches using Brave's API.
@@ -37,6 +39,8 @@ Raiden+ is an advanced AI-powered assistant designed to provide seamless interac
 - **Dynamic Conversations**: Engage with Raiden+ in a sleek, futuristic chat interface.
 - **Typing Indicator**: Visual feedback when Raiden+ is processing your request.
 - **File Upload**: Drag and drop images for analysis.
+- **YouTube Previews**: Watch YouTube videos directly in the chat interface.
+- **Python REPL Output**: Beautifully formatted Python code execution results.
 
 ### Confirmation Modal
 - **Action Verification**: Confirm or cancel sensitive actions with a clean, intuitive modal.
@@ -53,7 +57,7 @@ Raiden+ is an advanced AI-powered assistant designed to provide seamless interac
 ### Backend Setup
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-repo/raiden-agent.git
+   git clone https://github.com/bsturgi0/raiden-agent.git
    cd raiden-agent
    ```
 2. Install dependencies:
@@ -83,7 +87,7 @@ Raiden+ is an advanced AI-powered assistant designed to provide seamless interac
 ### Backend
 - **Framework**: FastAPI
 - **LLM Integration**: Supports multiple AI models via LangChain.
-- **Tooling**: AWS Rekognition, GitHub API, Brave Search API, and more.
+- **Tooling**: AWS Rekognition, GitHub API, Brave Search API, YouTube Search, Python REPL, and more.
 
 ### Frontend
 - **HTML/CSS/JavaScript**: A futuristic, responsive UI.
@@ -98,6 +102,7 @@ Raiden+ is an advanced AI-powered assistant designed to provide seamless interac
 3. Select an AI model from the sidebar.
 4. Interact with Raiden+ by typing your queries or uploading files.
 5. Confirm sensitive actions via the confirmation modal.
+6. Use tools like YouTube search to preview videos or Python REPL for dynamic computations.
 
 ---
 
